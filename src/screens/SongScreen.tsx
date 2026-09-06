@@ -10,6 +10,10 @@ import { usePrefetchNext } from "../audio/usePrefetchNext";
 import { formatTime } from "../audio/formatTime";
 import { useIdleFade } from "./useIdleFade";
 import { useSongPrepare } from "../audio/useSongPrepare";
+// TEMPORARY — production audio diagnostics only, see AudioEngine.ts banner
+// and useAudioDebugSnapshot.ts. Delete this import + the block that uses it
+// once the deployed "Yüklenemedi" cause is confirmed.
+import { useAudioDebugSnapshot } from "../audio/useAudioDebugSnapshot";
 import "./SongScreen.css";
 
 /**
@@ -73,6 +77,7 @@ export function SongScreen({
 }) {
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const { currentTime, duration, isPlaying, hasError, isBuffering } = useAudioSnapshot();
+  const debugSnapshot = useAudioDebugSnapshot(); // TEMPORARY diagnostics
   // Chrome should stay put while she's waiting on a stall, or once closing
   // has started — receding it during a buffer (or fading it twice at once)
   // would read as the screen having died, not settled.
@@ -174,13 +179,45 @@ export function SongScreen({
           style={simdiChromeOpacity !== undefined ? { opacity: simdiChromeOpacity } : undefined}
         >
           {hasError ? (
-            <button
-              type="button"
-              className="song-screen__retry"
-              onClick={() => AudioEngine.retry()}
-            >
-              yüklenemedi — tekrar dene
-            </button>
+            <>
+              <button
+                type="button"
+                className="song-screen__retry"
+                onClick={() => AudioEngine.retry()}
+              >
+                yüklenemedi — tekrar dene
+              </button>
+              {/* TEMPORARY — production audio diagnostics. Remove this whole
+                  block (and the useAudioDebugSnapshot import/call above)
+                  once the deployed "Yüklenemedi" cause is confirmed. */}
+              <pre className="song-screen__debug">
+                {[
+                  `track: ${debugSnapshot.trackId}`,
+                  `tier attempted: ${debugSnapshot.tier}`,
+                  `src attempted: ${debugSnapshot.attemptedSrc}`,
+                  `currentSrc: ${debugSnapshot.currentSrc}`,
+                  `mp3 fallback attempted: ${debugSnapshot.mp3FallbackAttempted}`,
+                  `error.code: ${debugSnapshot.errorCode ?? "null"}`,
+                  `error.message: ${debugSnapshot.errorMessage ?? "null"}`,
+                  `networkState: ${debugSnapshot.networkState}`,
+                  `readyState: ${debugSnapshot.readyState}`,
+                  `canPlayType(mp4/aac): "${debugSnapshot.canPlayMp4}"`,
+                  `canPlayType(mpeg): "${debugSnapshot.canPlayMpeg}"`,
+                  `play() rejection: ${
+                    debugSnapshot.playRejection
+                      ? `${debugSnapshot.playRejection.name}: ${debugSnapshot.playRejection.message}`
+                      : "none"
+                  }`,
+                  `last events:`,
+                  ...debugSnapshot.eventLog
+                    .slice(-10)
+                    .map(
+                      (e) =>
+                        `  t=${e.t} ${e.type} rs=${e.readyState} ns=${e.networkState} err=${e.errorCode ?? "-"}`
+                    ),
+                ].join("\n")}
+              </pre>
+            </>
           ) : (
             <PlayPauseButton
               isPlaying={isPlaying}

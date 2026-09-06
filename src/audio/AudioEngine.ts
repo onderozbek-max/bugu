@@ -14,6 +14,70 @@ import { AUDIO_DELIVERY_POLICY, COMPLETION_THRESHOLD, qualityPreferenceOrder } f
 
 type Listener = () => void;
 
+/**
+ * ==================== TEMPORARY PRODUCTION AUDIO DIAGNOSTICS ====================
+ * Added solely to find why the deployed GitHub Pages build shows
+ * "Yüklenemedi" on a real device when every static check (codec, git state,
+ * HTTP headers, file integrity) already came back clean. Everything below
+ * this banner down to its matching end-banner is instrumentation only — it
+ * observes and records events, it does NOT change fallback/error behavior.
+ * Delete this block (and its call sites: the trace listener registration in
+ * the constructor, the `triedIndices`/`lastPlayRejection` bookkeeping, and
+ * `getDebugSnapshot()`) once the real cause is confirmed from a real
+ * browser's console/UI. See src/audio/useAudioDebugSnapshot.ts (also
+ * temporary) and the diagnostic block in SongScreen.tsx.
+ */
+const TRACE_EVENTS = [
+  "loadstart",
+  "loadedmetadata",
+  "loadeddata",
+  "canplay",
+  "canplaythrough",
+  "play",
+  "playing",
+  "pause",
+  "waiting",
+  "stalled",
+  "suspend",
+  "abort",
+  "emptied",
+  "error",
+] as const;
+
+const MEDIA_ERROR_MESSAGES: Record<number, string> = {
+  1: "MEDIA_ERR_ABORTED — fetching process aborted (by user or script, e.g. src/load() churn)",
+  2: "MEDIA_ERR_NETWORK — a network error occurred while fetching",
+  3: "MEDIA_ERR_DECODE — an error occurred while decoding",
+  4: "MEDIA_ERR_SRC_NOT_SUPPORTED — the source (format or file) is not supported",
+};
+
+export interface AudioTraceEntry {
+  t: number;
+  type: string;
+  track: string | null;
+  src: string;
+  readyState: number;
+  networkState: number;
+  errorCode: number | null;
+}
+
+export interface AudioDebugSnapshot {
+  trackId: string | null;
+  attemptedSrc: string | null;
+  tier: string | null;
+  mp3FallbackAttempted: boolean;
+  errorCode: number | null;
+  errorMessage: string | null;
+  networkState: number;
+  readyState: number;
+  currentSrc: string;
+  canPlayMp4: string;
+  canPlayMpeg: string;
+  playRejection: { name: string; message: string } | null;
+  eventLog: AudioTraceEntry[];
+}
+/** ==================== end temporary diagnostics types ==================== */
+
 class AudioEngineImpl {
   readonly element: HTMLAudioElement;
   private currentSongId: string | null = null;
@@ -56,6 +120,15 @@ class AudioEngineImpl {
    * loading affordance, not the hard error/retry UI. Never set `hasError`. */
   private buffering = false;
 
+  // ---- TEMPORARY diagnostics state (see banner above) ----
+  /** Every source index actually assigned to `element.src` + `load()`-ed for
+   * the current song, regardless of outcome — used only to answer "was the
+   * MP3 fallback actually attempted", not to gate any real behavior. */
+  private triedIndices = new Set<number>();
+  private lastPlayRejection: { name: string; message: string } | null = null;
+  private eventLog: AudioTraceEntry[] = [];
+  // ---- end temporary diagnostics state ----
+
   constructor() {
     this.element = new Audio();
     this.element.preload = "none";
@@ -74,7 +147,35 @@ class AudioEngineImpl {
     this.element.addEventListener("stalled", this.handleWaiting);
     this.element.addEventListener("playing", this.handleReady);
     this.element.addEventListener("canplay", this.handleReady);
+
+    // TEMPORARY: chronological trace, purely observational — added
+    // alongside the functional listeners above, never replacing them, and
+    // never itself calling handleError or touching fallback state.
+    TRACE_EVENTS.forEach((type) => this.element.addEventListener(type, this.traceEvent));
   }
+
+  /** TEMPORARY — logs every requested lifecycle event to the console and to
+   * the in-memory eventLog the debug snapshot exposes. Never mutates
+   * playback/fallback state. */
+  private traceEvent = (e: Event) => {
+    const el = this.element;
+    const entry: AudioTraceEntry = {
+      t: Math.round(performance.now()),
+      type: e.type,
+      track: this.currentSongId,
+      src: el.currentSrc,
+      readyState: el.readyState,
+      networkState: el.networkState,
+      errorCode: el.error?.code ?? null,
+    };
+    this.eventLog.push(entry);
+    if (this.eventLog.length > 60) this.eventLog.shift();
+    // eslint-disable-next-line no-console
+    console.info(
+      `[audio-trace] t=${entry.t}ms type=${entry.type} track=${entry.track} readyState=${entry.readyState} networkState=${entry.networkState} errorCode=${entry.errorCode} src=${entry.src}`
+    );
+    this.notify();
+  };
 
   private notify = () => {
     this.listeners.forEach((l) => l());
@@ -138,6 +239,7 @@ class AudioEngineImpl {
     this.element.preload = "metadata";
     this.element.src = next.src;
     this.element.load();
+    this.triedIndices.add(this.sourceIndex); // TEMPORARY diagnostics
 
     const afterMetadata = () => {
       if (resumeTime > 0) this.element.currentTime = resumeTime;
@@ -249,6 +351,7 @@ class AudioEngineImpl {
       this.element.preload = "metadata";
       this.element.src = this.sources[this.sourceIndex].src;
       this.element.load();
+      this.triedIndices = new Set([this.sourceIndex]); // TEMPORARY diagnostics: reset per new song
     }
 
     if (resumeAt && Number.isFinite(resumeAt) && resumeAt > 0) {
@@ -265,7 +368,15 @@ class AudioEngineImpl {
 
   play() {
     this.wantsPlay = true;
-    void this.element.play().catch(() => {});
+    this.lastPlayRejection = null; // TEMPORARY diagnostics: clear before new attempt
+    void this.element.play().catch((err: unknown) => {
+      // TEMPORARY diagnostics only — this catch already existed and already
+      // swallowed the rejection unconditionally; recording it here does not
+      // change that a rejected play() promise never sets hasError/erroredSongId.
+      const e = err as { name?: string; message?: string } | undefined;
+      this.lastPlayRejection = { name: e?.name ?? "Error", message: e?.message ?? String(err) };
+      this.notify();
+    });
   }
 
   pause() {
@@ -306,7 +417,31 @@ class AudioEngineImpl {
     this.element.preload = "metadata";
     this.element.src = this.sources[this.sourceIndex].src;
     this.element.load();
+    this.triedIndices = new Set([this.sourceIndex]); // TEMPORARY diagnostics
     this.play();
+  }
+
+  /** TEMPORARY — everything a real device's browser console/UI needs to show
+   * to explain a "Yüklenemedi" state. See banner near the top of this file. */
+  getDebugSnapshot(): AudioDebugSnapshot {
+    const el = this.element;
+    const currentEntry = this.sources[this.sourceIndex] as SongSource | undefined;
+    const mp3Index = this.sources.findIndex((s) => s.quality !== "high");
+    return {
+      trackId: this.currentSongId,
+      attemptedSrc: currentEntry?.src ?? null,
+      tier: currentEntry?.quality ?? null,
+      mp3FallbackAttempted: mp3Index !== -1 && this.triedIndices.has(mp3Index),
+      errorCode: el.error?.code ?? null,
+      errorMessage: el.error ? (MEDIA_ERROR_MESSAGES[el.error.code] ?? `unknown code ${el.error.code}`) : null,
+      networkState: el.networkState,
+      readyState: el.readyState,
+      currentSrc: el.currentSrc,
+      canPlayMp4: el.canPlayType('audio/mp4; codecs="mp4a.40.2"'),
+      canPlayMpeg: el.canPlayType("audio/mpeg"),
+      playRejection: this.lastPlayRejection,
+      eventLog: [...this.eventLog],
+    };
   }
 
   seek(seconds: number) {
