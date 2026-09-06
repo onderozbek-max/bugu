@@ -80,8 +80,8 @@ function takeSnapshot(): Snapshot {
     rects,
     computed,
     errors: getRuntimeErrors()
-      .slice(-5)
-      .map((e) => `[${e.t}] ${e.kind}: ${e.message}`),
+      .slice(-3)
+      .map((e) => `[${e.t}] ${e.kind}: ${e.message}${e.stack ? `\n${e.stack}` : ""}`),
   };
 }
 
@@ -99,16 +99,47 @@ export function MobileDebugOverlay() {
     };
   }, []);
 
+  // Collapsed by default: a thin tap-to-expand strip pinned to the TOP edge
+  // (not bottom) specifically so it never sits over the play button, which
+  // lives centered/lower on every song screen. Only the strip itself has
+  // pointerEvents — the rest of the page stays fully tappable underneath.
+  const [expanded, setExpanded] = useState(false);
+  const errorCount = snap.errors.length;
+
+  if (!expanded) {
+    return (
+      <div
+        onClick={() => setExpanded(true)}
+        style={{
+          position: "fixed",
+          inset: "0 0 auto 0",
+          zIndex: 2147483647,
+          background: errorCount ? "rgba(140,0,0,0.9)" : "rgba(0,0,0,0.75)",
+          color: "#5ff67a",
+          font: "10px/1.4 ui-monospace, Menlo, monospace",
+          padding: "3px 8px",
+          pointerEvents: "auto",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {`[dbg] stage=${snap.journey.stage} phase=${snap.journey.phase} playing=${snap.playing} ended=${snap.ended} errors=${errorCount} (tap to expand)`}
+      </div>
+    );
+  }
+
   return (
     <pre
+      onClick={() => setExpanded(false)}
       style={{
         position: "fixed",
-        inset: "auto 0 0 0",
+        inset: "0 0 auto 0",
         margin: 0,
-        maxHeight: "48vh",
+        maxHeight: "40vh",
         overflowY: "auto",
         zIndex: 2147483647,
-        background: "rgba(0,0,0,0.85)",
+        background: "rgba(0,0,0,0.9)",
         color: "#5ff67a",
         font: "9px/1.4 ui-monospace, Menlo, monospace",
         padding: "6px 8px",
@@ -117,7 +148,7 @@ export function MobileDebugOverlay() {
         pointerEvents: "auto",
       }}
     >
-      {`[MOBILE DEBUG ${snap.time}] stage=${snap.journey.stage} phase=${snap.journey.phase}
+      {`[MOBILE DEBUG ${snap.time}] (tap to collapse) stage=${snap.journey.stage} phase=${snap.journey.phase}
 lastTransition: ${snap.journey.lastTransition}
 track=${snap.track} playing=${snap.playing} ended=${snap.ended} t=${snap.currentTime.toFixed(1)}/${snap.duration.toFixed(1)}
 visibilityState=${snap.visibilityState}
@@ -130,7 +161,7 @@ ${Object.entries(snap.rects)
 ${Object.entries(snap.computed)
   .map(([k, v]) => `${k}: ${v}`)
   .join("\n")}
--- errors (last 5) --
+-- errors (last 3, with stack) --
 ${snap.errors.length ? snap.errors.join("\n") : "(none)"}`}
     </pre>
   );

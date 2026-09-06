@@ -119,6 +119,36 @@ class AudioEngineImpl {
   /** Soft "the browser is waiting on data" signal — drives an elegant
    * loading affordance, not the hard error/retry UI. Never set `hasError`. */
   private buffering = false;
+  /**
+   * Stable snapshots of `element.currentTime` and `element.duration`,
+   * captured exactly once at the moment `notify()` fires, then frozen until
+   * the next `notify()` call.
+   *
+   * WHY THIS IS NECESSARY:
+   * `element.currentTime` reads from the audio hardware clock — a live,
+   * continuously-updating value that advances even between two synchronous
+   * JS calls in the same event-loop tick. `useSyncExternalStore`'s internal
+   * "tearing" check calls `getSnapshot()` twice synchronously during
+   * React's commit phase; if `element.currentTime` has advanced even a
+   * fraction of a millisecond between those two calls, `getSnapshot()`
+   * returns a new object identity both times, React's `checkForNestedUpdates`
+   * treats the store as having changed, schedules another re-render via
+   * `forceStoreRerender`, which causes another snapshot call, which finds
+   * another change — a tight synchronous loop that exhausts React's nested-
+   * update-depth limit and crashes the entire component tree (error #185 /
+   * "Maximum update depth exceeded"). On desktop this drifts slowly enough
+   * to usually stay below the threshold; on iOS Safari, which has a more
+   * aggressive audio clock and fires multiple playback events in bursts
+   * during initial buffering, the drift is large enough to trip it
+   * consistently within the first ~10s of playback.
+   *
+   * Snapshotting at `notify()` time means `getSnapshot()` always reads a
+   * pure-JS number that was frozen at a discrete point (the event handler
+   * call), never from the live audio clock. Two synchronous `getSnapshot()`
+   * calls within any single JS task see exactly the same values.
+   */
+  private _snapTime = 0;
+  private _snapDuration = NaN;
 
   // ---- TEMPORARY diagnostics state (see banner above) ----
   /** Every source index actually assigned to `element.src` + `load()`-ed for
@@ -178,6 +208,12 @@ class AudioEngineImpl {
   };
 
   private notify = () => {
+    // Freeze a snapshot of the live audio-clock values BEFORE calling
+    // listeners, so getSnapshot() reads these stable JS numbers rather than
+    // element.currentTime/duration directly (see _snapTime/_snapDuration
+    // field comments above for the full explanation).
+    this._snapTime = this.element.currentTime;
+    this._snapDuration = this.element.duration;
     this.listeners.forEach((l) => l());
   };
 
@@ -449,12 +485,18 @@ class AudioEngineImpl {
     this.element.currentTime = Math.max(0, Math.min(seconds, this.element.duration));
   }
 
+  /** The last time value snapshotted by notify() — stable within any single
+   * JS task, unlike element.currentTime which reads the live audio clock.
+   * Use this in getSnapshot() / any code that useSyncExternalStore may call
+   * synchronously more than once per tick. Direct element access is still
+   * available via AudioEngine.element.currentTime for seek logic etc. */
   get currentTime() {
-    return this.element.currentTime;
+    return this._snapTime;
   }
 
+  /** Same rationale as currentTime above. */
   get duration() {
-    return this.element.duration;
+    return this._snapDuration;
   }
 
   get isPlaying() {

@@ -42,8 +42,9 @@ export function subscribeDebugJourney(cb: () => void): () => void {
 // ---- global runtime error capture (page-wide, installed once at import) ----
 export interface RuntimeErrorEntry {
   t: string;
-  kind: "error" | "unhandledrejection";
+  kind: "error" | "unhandledrejection" | "console.error";
   message: string;
+  stack: string | null;
 }
 
 const runtimeErrors: RuntimeErrorEntry[] = [];
@@ -67,16 +68,42 @@ export function installGlobalErrorCapture() {
       t: new Date().toISOString().slice(11, 23),
       kind: "error",
       message: `${e.message} (${e.filename}:${e.lineno}:${e.colno})`,
+      stack: e.error?.stack ?? null,
     });
   });
   window.addEventListener("unhandledrejection", (e) => {
-    const reason = e.reason as { message?: string; name?: string } | undefined;
+    const reason = e.reason as { message?: string; name?: string; stack?: string } | undefined;
     pushRuntimeError({
       t: new Date().toISOString().slice(11, 23),
       kind: "unhandledrejection",
       message: reason?.message ? `${reason.name ?? "Error"}: ${reason.message}` : String(e.reason),
+      stack: reason?.stack ?? null,
     });
   });
+  // React reports its "Maximum update depth exceeded" error (and the
+  // component stack trailing it) via console.error, NOT window.onerror —
+  // window.onerror only fires for truly uncaught throws. In dev/unminified
+  // builds React logs the error object AND a separate console.error call
+  // with the component stack; both come through here since we intercept
+  // every console.error call, not just Error-typed args.
+  const originalConsoleError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    try {
+      const firstError = args.find((a): a is Error => a instanceof Error);
+      const message = args
+        .map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : String(a)))
+        .join(" | ");
+      pushRuntimeError({
+        t: new Date().toISOString().slice(11, 23),
+        kind: "console.error",
+        message,
+        stack: firstError?.stack ?? null,
+      });
+    } catch {
+      // never let capture itself throw and mask the real console.error call
+    }
+    originalConsoleError(...args);
+  };
 }
 
 /** Recognized `?flag=1` URL params -> `data-dbg-<lowercase>` attributes on

@@ -67,10 +67,36 @@ const SERVER_SNAPSHOT: AudioSnapshot = {
   isBuffering: false,
 };
 
+/** Must be a STABLE reference across renders (module-level, not created
+ * inline in the hook) — this is the actual root cause of the mobile
+ * "React error #185 / Maximum update depth exceeded" crash (see
+ * getServerSnapshot below for the matching fix). A fresh closure passed as
+ * useSyncExternalStore's `subscribe` argument makes React treat every
+ * render as "the subscription changed," forcing it to re-subscribe and
+ * re-check getSnapshot() during that render's passive-effect commit. Since
+ * `currentTime` changes continuously during real playback, that recheck
+ * almost always finds a newer value than the one just rendered with,
+ * forces an immediate re-render, which recreates the closure again,
+ * checks again, finds another newer value again — a tight synchronous
+ * loop with no external event ever breaking it, which is exactly what
+ * trips React's nested-update-depth guard. A stable reference means React
+ * only needs to do that mount-time check once; ordinary playback-driven
+ * re-renders afterward go through the normal subscribe-notify path
+ * instead. */
+function subscribe(onStoreChange: () => void) {
+  return AudioEngine.subscribe(onStoreChange);
+}
+
+/** Also hoisted to module scope for the same reason as `subscribe` above
+ * — an inline `() => SERVER_SNAPSHOT` is a fresh function every render.
+ * This one has no realistic way to trigger the loop on its own (this app
+ * has no SSR hydration pass), but there's no reason to leave a second
+ * unstable useSyncExternalStore argument in place once the mechanism is
+ * understood. */
+function getServerSnapshot() {
+  return SERVER_SNAPSHOT;
+}
+
 export function useAudioSnapshot() {
-  return useSyncExternalStore(
-    (onStoreChange) => AudioEngine.subscribe(onStoreChange),
-    getSnapshot,
-    () => SERVER_SNAPSHOT
-  );
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
