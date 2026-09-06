@@ -84,13 +84,52 @@ export const songs: Record<SongId, SongConfig> = {
   dun: {
     id: "dun",
     title: "DÜN",
+    // No "lossless"/WAV tier: there is no real WAV master for this song (the
+    // old one was a placeholder tone) — do not resurrect a placeholder as a
+    // fallback tier. "compatible" is a real, full-length MP3 transcode of
+    // the same song (not a placeholder either) — a genuine safety net for
+    // the rare browser whose AAC decoder can't handle this particular file,
+    // not a silent regression to filler audio.
     sources: [
-      { src: "/audio/dun.wav", type: "audio/wav", quality: "lossless" },
       { src: "/audio/dun.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: "/audio/dun.mp3", type: "audio/mpeg", quality: "compatible" },
     ],
+    // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied. Do not rewrite,
+    // spell-check, normalize, or "fix" repeated/near-identical stanzas.
     lyrics: [
-      ["Sözler burada olacak.", "Şimdilik yer tutucu."],
-      ["İkinci kıta.", "Üçüncü satır."],
+      [
+        "Bir hayatım vardı, kendince güzel",
+        "Bazen mutluluk, bazen de keder",
+        "Çok şey istedim, çok kez üzüldüm",
+        "Durmadan hep koştum, ve hep yoruldum",
+      ],
+      [
+        "Sonu bitmeyen bazı masalların oldu",
+        "Tuttuğun boş kadehler göz yaşınla doldu",
+        "Dost dediklerin ve arkadaşların",
+        "Susuz bir yaprak gibi sararıp soldu",
+      ],
+      ["Koştum, yoruldum", "Güldüm, ağladım", "Özledim bilmeden", "Senmişsin aradığım"],
+      ["Sonra sen...", "Bir anda karşımda", "Sonra sen...", "Gölgeler ardında"],
+      ["Gerçek sandığım ne varsa", "Yalanmış aslında", "Sonra sen...", "Gördüğüm en güzel rüya"],
+      [
+        "Bir hayatın vardı, Buğu'nun ardında",
+        "Ne güzel gülerdin eski resimlerde",
+        "Farkında bile değildin özlediğinin",
+        "Martılar uçar mı hâlâ gökyüzünde?",
+      ],
+      [
+        "İstikameti meçhul tuhaf bir yoldaydım",
+        "O boş kadehler ne yapsam dolmadı",
+        "Dost dediklerim ve arkadaşlarım",
+        "Dertlerime bir derman olmadı",
+      ],
+      ["Koştum, yoruldum", "Güldüm, ağladım", "Özledim bilmeden", "Senmişsin aradığım"],
+      ["Sonra sen...", "Bir anda karşımda", "Sonra sen...", "Gölgeler ardında"],
+      ["Gerçek sandığım ne varsa", "Yalanmış aslında", "Sonra sen...", "Gördüğüm en güzel rüya"],
+      ["Sonra sen...", "Bir anda karşımda", "Sonra sen...", "Gölgeler ardında"],
+      ["Gerçek sandığım ne varsa", "Yalanmış aslında", "Sonra sen...", "Gördüğüm en güzel rüya"],
+      ["Dünya dönmeye devam etti.", "Ben ilk defa", "yarını merak ettim."],
     ],
     // Dusk — the horizon buried and warm, close and heavy.
     accentColor: "#8a6a4f",
@@ -103,13 +142,65 @@ export const songs: Record<SongId, SongConfig> = {
   yarin: {
     id: "yarin",
     title: "YARIN",
+    // See DÜN's sources comment — same reasoning.
     sources: [
-      { src: "/audio/yarin.wav", type: "audio/wav", quality: "lossless" },
       { src: "/audio/yarin.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: "/audio/yarin.mp3", type: "audio/mpeg", quality: "compatible" },
     ],
+    // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied. Note the chorus
+    // recurs with two distinct variants ("Senden"/"İçimde hâlâ sen var" vs.
+    // the final "Bizden" variant) — that's an intentional lyric variation in
+    // the source text, not a typo to reconcile.
     lyrics: [
-      ["Sözler burada olacak.", "Şimdilik yer tutucu."],
-      ["İkinci kıta.", "Üçüncü satır."],
+      [
+        "Evimizin anahtarları avucumda",
+        "Bizim şarkımız benim dilimin ucunda",
+        "Akşam güneşi salona süzülürken",
+        "Bu hayal olsa bile kurulmaz",
+      ],
+      [
+        "Tokyo geceleri uzun, uykumuz kaçak",
+        "Dönüşte iki kedi, kapıda bi merak",
+        "Yıllar sonra bir kep havada dönerken",
+        "Aynı şarkı çalıyor radyoda — sesini aç",
+      ],
+      [
+        "Kalabalık masa, göz göze geldik yine",
+        "Kilitlendim kaldım yemyeşil gözlerine",
+        "Kimse anlamaz bizim neden sustuğumuzu",
+        "Gizlice gülüşün ele verir senin de",
+      ],
+      ["Seninle dolu her yer", "Seninle dolu yıllar", "Dönüp baktığım her yerde", "Senden bir şeyler var"],
+      ["Seninle dolu her yer", "Ne eksilir, ne solar", "Bir hayat geçti derken", "İçimde hâlâ sen var"],
+      [
+        "Bazı günler ağır, ev sessize yakın",
+        "Gözlerin buğulu, ve sözlerin yarım",
+        "Ben sessizce otururken yanı başında",
+        "Gölgeli ışıkları süzülür sabahın",
+      ],
+      [
+        "Zor anlarımda bir sesin yeterdi bana",
+        "Beklerdim yanında hiç sesin çıkmasa da",
+        "Bir gün sen tuttun elimi, bir gün ben senin",
+        "Düştük, ama hep kalktık; aynı yolda",
+      ],
+      ["Seninle dolu her yer", "Seninle dolu yıllar", "Dönüp baktığım her yerde", "Senden bir şeyler var"],
+      ["Seninle dolu her yer", "Ne eksilir, ne solar", "Bir hayat geçti derken", "İçimde hâlâ sen var"],
+      [
+        "Bir gün radyolarda çalar bizim şarkımız",
+        "Hiçbir zaman bıkmadık biz, farkında mısın?",
+        "Bizden başka bir kimse dinlemese bile",
+        "Bizim için en güzel hatıralarımız",
+      ],
+      [
+        "Dolapta bir kutu, içi karmakarışık",
+        "Birkaç eski fotoğraf arkadaşlarımız",
+        "Biletler, mektuplar ve de şarkı sözleri",
+        "Hep kalbimizde gizli sakladıklarımız",
+      ],
+      ["Seninle dolu her yer", "Seninle dolu yıllar", "Dönüp baktığım her yerde", "Bizden bir şeyler var"],
+      ["Seninle dolu her yer", "Ne eksilir, ne solar", "Bir hayat geçti derken", "İçimde hâlâ sen var"],
+      ["Yıllar sustu.", "Müzik kaldı.", "Sonra sen—", "Tam karşımdaydın."],
     ],
     // Dawn — warm gold light rising over the same horizon, not clinical
     // ice-blue. Deliberately closer in warmth to DÜN's dusk than a cold
@@ -128,11 +219,38 @@ export const songs: Record<SongId, SongConfig> = {
   simdi: {
     id: "simdi",
     title: "ŞİMDİ",
+    // See DÜN's sources comment — same reasoning.
     sources: [
-      { src: "/audio/simdi.wav", type: "audio/wav", quality: "lossless" },
       { src: "/audio/simdi.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: "/audio/simdi.mp3", type: "audio/mpeg", quality: "compatible" },
     ],
-    lyrics: [["Sözler burada olacak."]],
+    // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied.
+    lyrics: [
+      [
+        "Filmin adını unuttum",
+        "Güldüğün o an aklımda",
+        "Sabah sessin ilk duyduğum,",
+        "Gece kalan kulağımda",
+      ],
+      [
+        "Artık her sabah",
+        "Senle başlasın",
+        "Aynı evde",
+        "Aynı yastıkta",
+        "Sarılarak",
+        "Bitsin her gün",
+        "Sarılarak",
+        "Her bir gece",
+      ],
+      [
+        "Söylenecekler bitti, artık sözler bitti ve sıra sende",
+        "Bir hayat var bir umut bir güneş yelken açalım birlikte",
+        "Diz çöktüm ruhum bir tanrıçanın saklı bembeyaz ellerinde",
+        "Asla sönmez bu ateş, yanar benimle",
+        "Benim için cevap belli sonsuza dek",
+        "Yürüyecek misin bu yolda benimle?",
+      ],
+    ],
     // Daylight — the same horizon, fully risen and clear. Neither dusk nor
     // dawn: a settled, neutral light, matching --ink almost exactly.
     accentColor: "#f5f1ea",

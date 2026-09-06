@@ -78,6 +78,20 @@ export function SongScreen({
   // would read as the screen having died, not settled.
   const faded = useIdleFade(isPlaying && !hasError && !isBuffering && !closing);
 
+  // ŞİMDİ only: a one-way, playback-time-anchored recede, independent of
+  // touch (unlike useIdleFade, this never wakes back up on a tap) — roughly
+  // 18-30s into playback, title/controls/sözler gradually become less
+  // visually insistent. Nothing unmounts and nothing moves; the real-world
+  // moment is meant to become the climax, not the screen going dark or
+  // controls becoming unreachable.
+  const simdiRecede =
+    song.id === "simdi" && isPlaying && currentTime > 18 ? Math.min(1, (currentTime - 18) / 12) : 0;
+  // Floor of 0.42, not near-zero — the brief requires the interface stay
+  // "visible, understandable, tappable" at ~20s in, only "less visually
+  // insistent." A floor low enough to be merely nonzero fails that; this
+  // still reads as clearly receded relative to the first 18s.
+  const simdiChromeOpacity = song.id === "simdi" ? 1 - simdiRecede * 0.58 : undefined;
+
   usePersistProgress(persistProgress ? song.id : null);
   usePrefetchNext(currentTime, duration, nextSong);
   useSongPrepare(song, resumeAt, lockMediaSessionNav, onHeard, onEnded);
@@ -87,28 +101,26 @@ export function SongScreen({
   // passed (Album Mode), never inferred from `seekable` now that ŞİMDİ is
   // also seekable in Journey Mode without wanting a numeric readout.
   const showTimeReadout = showTime && Number.isFinite(duration) && duration > 0 && !hasError;
-  // Title/controls settle low for a grounded song (DÜN), rise for an open
-  // one (YARIN), centered for a resolved one (ŞİMDİ) — reads straight from
-  // the same horizonY value driving the world behind it, so the two never
-  // disagree about which way is "open".
   // Title and controls are one composed unit (.song-screen__stage), not two
-  // independently-positioned elements — this is what fixes the old "title
-  // shoved into a corner, play button floating independently" disconnect.
-  // The whole stage moves together: low/bottom for a grounded song (DÜN),
-  // high/top for an open one (YARIN), centered for a resolved one (ŞİMDİ).
-  const { horizonY } = song.world;
+  // independently-positioned elements. Placement is authored per song here
+  // directly — NOT derived from song.world.horizonY, which belongs to the
+  // retired horizon-line concept and has no relationship to the current
+  // pool field (PersistentWorld reads crowd/spread/openness/etc., never
+  // horizonY). Pinning DÜN to the very bottom against that stale value is
+  // exactly what produced the earlier failure of a huge empty upper frame
+  // with every control crammed into the last 6vh — the pool field's own
+  // visual activity (see PersistentWorld.css anchor points) now sits mostly
+  // in the vertical middle third for every phase, so chrome is centered for
+  // DÜN/ŞİMDİ (amid that activity, not stranded below it) and only nudged
+  // upward for YARIN, to read as reaching toward its own open, higher pool
+  // spread without recreating an empty opposite extreme.
   const stageStyle: CSSProperties =
-    horizonY < 0.4
+    song.id === "yarin"
       ? {
-          justifyContent: "flex-end",
-          paddingBottom: "calc(env(safe-area-inset-bottom) + 6vh)",
+          justifyContent: "flex-start",
+          paddingTop: "calc(env(safe-area-inset-top) + 15vh)",
         }
-      : horizonY > 0.6
-        ? {
-            justifyContent: "flex-start",
-            paddingTop: "calc(env(safe-area-inset-top) + 11vh)",
-          }
-        : { justifyContent: "center" };
+      : { justifyContent: "center" };
   const rootStyle = { "--accent": song.accentColor } as CSSProperties;
 
   return (
@@ -137,11 +149,20 @@ export function SongScreen({
         </button>
       )}
 
-      <div className="song-screen__stage" style={stageStyle}>
+      {/* Recedes further while lyrics are open -- without this, the still-
+          fully-visible title/glyph/progress sat at the same centered screen
+          position as the lyrics text and read as a confusing double-
+          exposure rather than "the same world, quieter." Nothing unmounts,
+          it just yields visual priority to the clearing in front of it. */}
+      <div
+        className={`song-screen__stage${lyricsOpen ? " song-screen__stage--lyrics-open" : ""}`}
+        style={stageStyle}
+      >
         <h1
           className={`song-screen__title${song.id === "simdi" ? " song-screen__title--culmination" : ""}${
             closing ? " song-screen__title--concluding" : ""
           }`}
+          style={simdiChromeOpacity !== undefined ? { opacity: simdiChromeOpacity } : undefined}
         >
           {song.title}
         </h1>
@@ -150,6 +171,7 @@ export function SongScreen({
           className={`song-screen__controls${faded ? " song-screen__controls--faded" : ""}${
             closing ? " song-screen__controls--concluding" : ""
           }`}
+          style={simdiChromeOpacity !== undefined ? { opacity: simdiChromeOpacity } : undefined}
         >
           {hasError ? (
             <button

@@ -16,26 +16,36 @@
   flex-direction: column;
   align-items: center;
   gap: 34px;
+  transition: opacity 400ms var(--ease-resolve);
 }
 
+/* See SongScreen.tsx comment -- keeps the title/glyph/progress from
+   visually competing with the lyrics clearing occupying the same centered
+   position in front of it. */
+.song-screen__stage--lyrics-open {
+  opacity: 0.1;
+}
+
+/* Deliberately intimate, not editorial/gallery scale — the optical world
+   behind it is what creates hierarchy (scale, spread, displacement), not an
+   oversized centered serif wordmark. */
 .song-screen__title {
   font-family: var(--font-display);
-  font-size: clamp(40px, 12vw, 64px);
+  font-size: clamp(22px, 6.4vw, 30px);
   font-weight: 400;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
   text-align: center;
   margin: 0;
   opacity: 1;
   transition: opacity 1300ms var(--ease-resolve);
 }
 
-/* ŞİMDİ's title — a culmination, not an art-gallery title card. Deliberately
-   NOT larger than DÜN/YARIN's (bigger is not automatically more emotional);
-   slightly tighter tracking and full opacity give it presence through
-   precision instead of scale. */
+/* ŞİMDİ's title — smaller and quieter than DÜN/YARIN, not bigger. Presence
+   comes from the field resolving to near-perfect alignment around it, not
+   from the word itself demanding attention. */
 .song-screen__title--culmination {
-  font-size: clamp(38px, 11vw, 58px);
-  letter-spacing: 0.14em;
+  font-size: clamp(18px, 5vw, 24px);
+  letter-spacing: 0.01em;
 }
 
 /* The song ending (DÜN or YARIN, in Journey Mode) — the title recedes

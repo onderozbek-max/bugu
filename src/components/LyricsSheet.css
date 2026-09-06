@@ -1,76 +1,97 @@
-/* The scrim itself softens the world behind it rather than hiding it —
-   this is the "controlled blur/translucency" the sheet is meant to be
-   read as a layer OF, not a separate native-drawer surface bolted on top. */
-.lyrics-scrim {
+/* No blur on the world, no scrim covering the whole screen — just enough
+   darkening to shift focus, so the field stays visibly present and this
+   never reads as "a surface covering the experience." */
+.lyrics-veil {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--void) 45%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   z-index: 20;
+  /* Was 22% -- left the still-visible play glyph/progress underneath
+     showing directly through the lyrics text at the same screen position,
+     reading as broken double-exposure rather than "quieter, still here."
+     Darker (not opaque, no blur) still lets the field's own light bleed
+     through at the edges while the center clears enough for text. */
+  background: color-mix(in srgb, var(--void) 58%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
 }
 
-/* Translucent, not a solid panel: the world's own hue and light keep
-   bleeding through (via backdrop-filter), so opening sözler still reads as
-   "looking further into the same world," not "a new OS surface covering
-   it." Opacity is still high enough to hold typography comfortably
-   readable regardless of what's happening behind it. */
-.lyrics-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+/* NOT masked — the soft edge lives only on the decorative pool behind the
+   text (see .lyrics-clearing__pool below). Masking this whole container
+   was cutting off real content (the close button, later stanzas) any time
+   the text ran past a small radius from center — a real bug, not a look. */
+.lyrics-clearing {
+  position: relative;
   z-index: 21;
-  max-height: 72vh;
-  max-height: 72dvh;
-  background: color-mix(in srgb, var(--void) 74%, transparent);
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  border-radius: 22px 22px 0 0;
+  width: 100%;
+  max-width: 440px;
+  max-height: 74vh;
+  max-height: 74dvh;
+  padding: 40px 30px;
   display: flex;
   flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
+  align-items: stretch;
 }
 
-/* A thin lit hairline rather than a generic gray pill — the same visual
-   language as the world's own horizon line, tinted with the song's accent,
-   so the sheet still reads as authored rather than a default UI drawer. */
-.lyrics-sheet__handle {
-  width: 44px;
-  height: 2px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--ink) 55%, var(--accent, var(--ink)) 45%);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent, var(--ink)) 55%, transparent);
-  margin: 14px auto 6px;
-  flex-shrink: 0;
+/* A calm pool of light behind the text — same visual family as the field's
+   own pools, run through the shared #refr-fine filter (defined once in
+   PersistentWorld) so it stays optically part of the same world rather than
+   a new, unrelated surface. Its role here is contrast, not decoration. Only
+   THIS decorative layer gets the soft radial edge, sized generously so it
+   never visibly clips against the readable content in front of it. */
+.lyrics-clearing__pool {
+  position: absolute;
+  inset: -30% -10%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--void) 82%, transparent) 0%, transparent 70%);
+  filter: url(#refr-fine);
+  mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+  pointer-events: none;
 }
 
-.lyrics-sheet__title {
-  font-family: var(--font-ui);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: none;
-  opacity: 0.68;
-  text-align: center;
-  padding: 10px 0 4px;
-  flex-shrink: 0;
-}
-
-.lyrics-sheet__body {
+.lyrics-clearing__scroll {
+  position: relative;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 12px 28px 40px;
+  padding: 4px 6px 24px;
   font-family: var(--font-display);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 8%, #000 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8%, #000 90%, transparent 100%);
 }
 
-.lyrics-sheet__stanza {
-  margin: 0 0 28px;
-  font-size: 19px;
+.lyrics-clearing__title {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  text-align: center;
+  padding-bottom: 20px;
+}
+
+.lyrics-clearing__stanza {
+  margin: 0 0 26px;
+  font-size: 18px;
   line-height: 1.7;
   font-weight: 400;
+  text-align: center;
 }
 
-.lyrics-sheet__stanza p {
+.lyrics-clearing__stanza p {
   margin: 0;
+}
+
+.lyrics-clearing__close {
+  position: relative;
+  align-self: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  opacity: 0.55;
+  padding: 14px 10px 4px;
+}
+
+.lyrics-clearing__close:active {
+  opacity: 0.9;
 }

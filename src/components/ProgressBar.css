@@ -13,20 +13,24 @@
 .progress-bar__track {
   position: relative;
   height: 2px;
-  background: color-mix(in srgb, var(--ink) 34%, transparent);
+  background: color-mix(in srgb, var(--ink) 24%, transparent);
   border-radius: 2px;
 }
 
+/* The played portion runs through the SAME optical field as the world
+   behind it (#refr-fine, defined once in PersistentWorld and referenced
+   here by id) — its own scale is tweened from the same master `scale`
+   value, hard-capped at ~2px, so it stays honest with the DÜN/YARIN/ŞİMDİ
+   read (slightly uneven early, perfectly clean by ŞİMDİ) without the
+   displacement ever meaningfully diverging from the real seek target,
+   which is hit-tested against the whole track's rect, not the fill's edge. */
 .progress-bar__fill {
   position: absolute;
   inset: 0 auto 0 0;
   height: 100%;
-  /* Tinted with the song's own accent (see --accent, set by SongScreen) so
-     the played portion reads as "this song's color", not a generic app
-     accent shared identically across DÜN and YARIN. */
   background: color-mix(in srgb, var(--ink) 45%, var(--accent, var(--ink)) 55%);
   border-radius: 2px;
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent, var(--ink)) 65%, transparent);
+  filter: url(#refr-fine);
   transition: width 120ms linear;
 }
 
