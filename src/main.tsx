@@ -26,6 +26,16 @@ if (window.location.pathname === "/admin") {
       <AdminPanel />
     </StrictMode>
   );
+} else if (new URLSearchParams(window.location.search).get("lab") === "1") {
+  // V2 Audiovisual Laboratory — completely isolated from the production journey.
+  // Lazy-imported so it adds ZERO bytes to the main production bundle.
+  import("./lab/LabApp").then(({ LabApp }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <LabApp />
+      </StrictMode>
+    );
+  });
 } else {
   // Must run before the first render, not inside a useEffect — otherwise the
   // stale persisted screen mounts for one frame and AnimatePresence plays a

@@ -1,0 +1,126 @@
+/* ── Lab shell — full-screen canvas + minimal controls ───────────────────── */
+
+.lab {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lab__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ── Controls overlay ─────────────────────────────────────────────────────── */
+
+.lab__controls {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: max(env(safe-area-inset-bottom), 32px);
+  pointer-events: none;
+  transition: opacity 900ms ease;
+}
+
+.lab__controls--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lab__controls--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Song selector */
+.lab__song-row {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 24px;
+}
+
+.lab__song-btn {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 2px;
+  color: rgba(255, 255, 255, 0.45);
+  background: transparent;
+  cursor: pointer;
+  transition: color 200ms, border-color 200ms, background 200ms;
+}
+
+.lab__song-btn--active {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lab__song-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Play/pause — large tap target */
+.lab__play {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.30);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.80);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 200ms, background 200ms;
+  /* Separate backdrop-filter to avoid compositing issues on mobile Safari */
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.lab__play:active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+/* Loading / error state */
+.lab__status {
+  position: absolute;
+  top: max(env(safe-area-inset-top), 16px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: rgba(255, 255, 255, 0.30);
+  pointer-events: none;
+}
+
+/* "tap to show controls" hint — fades in after controls auto-hide */
+.lab__hint {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom), 18px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
