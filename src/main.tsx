@@ -5,6 +5,16 @@ import { AdminPanel } from "./admin/AdminPanel";
 import { reconcileStageOnBoot } from "./state/journeyStore";
 import { checkUnlockLink } from "./state/albumMode";
 import "./styles/global.css";
+// ==================== TEMPORARY — mobile black-screen debug harness ====================
+// Delete this whole block (imports, applyDebugFlagsFromUrl/installGlobalErrorCapture
+// calls, and the overlay-mounting block below) once the mobile rendering bug is
+// fixed. See src/debug/mobileDebug.ts for what each URL flag does.
+import "./debug/mobileDebugOverrides.css";
+import { applyDebugFlagsFromUrl, installGlobalErrorCapture, isMobileDebugEnabled } from "./debug/mobileDebug";
+
+applyDebugFlagsFromUrl();
+installGlobalErrorCapture();
+// ==================== end temporary block ====================
 
 // /admin is never linked from anywhere in the normal UI — a plain pathname
 // check here is all the "routing" this needs, rather than pulling in a
@@ -31,4 +41,18 @@ if (window.location.pathname === "/admin") {
       <App />
     </StrictMode>
   );
+
+  // TEMPORARY — mobile black-screen debug harness. Mounted as a SEPARATE
+  // React root, appended as a SIBLING of #root (not inside it), specifically
+  // so it survives whatever is making #root's contents/compositing
+  // disappear. Only mounts when ?mobileDebug=1 is present. Delete this
+  // block once the mobile rendering bug is fixed.
+  if (isMobileDebugEnabled()) {
+    const overlayHost = document.createElement("div");
+    overlayHost.id = "mobile-debug-overlay-root";
+    document.body.appendChild(overlayHost);
+    import("./debug/MobileDebugOverlay").then(({ MobileDebugOverlay }) => {
+      createRoot(overlayHost).render(<MobileDebugOverlay />);
+    });
+  }
 }

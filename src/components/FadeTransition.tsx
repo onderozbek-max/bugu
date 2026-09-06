@@ -24,6 +24,10 @@ export function FadeTransition({
   const reduced = prefersReducedMotion();
   return (
     <motion.div
+      // "fade-transition" is a TEMPORARY hook for the mobile black-screen
+      // debug harness (see src/debug/mobileDebugOverrides.css, ?noSongAnim=1)
+      // — purely a CSS selector target, no styling/behavior depends on it.
+      className="fade-transition"
       initial={{ opacity: 0, scale: 1 }}
       animate={{ opacity: 1, scale: 1.0 }}
       exit={{ opacity: 0, scale: 1.02 }}

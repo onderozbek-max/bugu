@@ -10,6 +10,8 @@ import { SongScreen } from "./screens/SongScreen";
 import { AlbumHome } from "./screens/AlbumHome";
 import { FadeTransition } from "./components/FadeTransition";
 import { PersistentWorld, type WorldPhase } from "./world/PersistentWorld";
+// TEMPORARY — mobile black-screen debug harness, see src/debug/mobileDebug.ts
+import { setDebugJourney } from "./debug/mobileDebug";
 
 /** Chrome-fade hold before DÜN's `ended` flips the persisted stage. The
  * world itself starts transforming immediately (see computePhase) — this
@@ -167,11 +169,20 @@ export default function App() {
     beginYarinClosing();
   }, [stage, hasError, beginYarinClosing]);
 
+  const phase = computePhase(stage, dunClosing, yarinClosing);
+
+  // TEMPORARY — mobile black-screen debug harness. Publishes stage/phase to
+  // a plain module-level bus so MobileDebugOverlay.tsx (a separate React
+  // root outside this component tree) can display them. Delete alongside
+  // src/debug/*. Placed before the albumMode early return so hook order
+  // stays unconditional.
+  useEffect(() => {
+    setDebugJourney(stage, albumMode ? "album" : phase);
+  }, [stage, phase, albumMode]);
+
   if (albumMode) {
     return <AlbumHome />;
   }
-
-  const phase = computePhase(stage, dunClosing, yarinClosing);
 
   return (
     <>

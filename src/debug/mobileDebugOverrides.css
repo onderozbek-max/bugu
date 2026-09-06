@@ -1,0 +1,57 @@
+/* ==================== TEMPORARY — MOBILE BLACK-SCREEN ISOLATION HARNESS ====================
+   Binary isolation flags for the mobile black-screen investigation. Each is
+   independent and combinable via URL query params, read once at boot
+   (see main.tsx applyDebugFlagsFromUrl()) and applied as data-dbg-* attributes
+   on <html>. Audio keeps using the same AudioEngine throughout — none of
+   these touch playback.
+
+   Try in this order on the real device:
+     ?mobileDebug=1                        -> just show the overlay, nothing disabled
+     ?mobileDebug=1&noBlend=1              -> mix-blend-mode: screen -> normal
+     ?mobileDebug=1&noSvgFilter=1          -> drop the feTurbulence/feDisplacementMap filters
+     ?mobileDebug=1&noAnim=1               -> stop the .field__pool drift keyframes
+     ?mobileDebug=1&noGrain=1              -> hide .field__grain entirely
+     ?mobileDebug=1&noIsolate=1            -> #root isolation: isolate -> auto
+     ?mobileDebug=1&noSongAnim=1           -> force FadeTransition's motion.div to opacity:1/no transform
+     ?mobileDebug=1&flat=1                 -> hide the whole pools+grain world, just --void background
+   Combine flags (e.g. ?mobileDebug=1&noBlend=1&noSvgFilter=1) to narrow down
+   which layer is the minimum trigger. Delete this file and its import in
+   main.tsx, plus mobileDebug.ts and MobileDebugOverlay.tsx, once the mobile
+   rendering bug is fixed. */
+
+html[data-dbg-noblend] .field__pools--tight,
+html[data-dbg-noblend] .field__pools--broad,
+html[data-dbg-noblend] .field__grain {
+  mix-blend-mode: normal !important;
+}
+
+html[data-dbg-nosvgfilter] .field__pools--tight,
+html[data-dbg-nosvgfilter] .field__pools--broad {
+  filter: none !important;
+}
+
+html[data-dbg-noanim] .field__pool {
+  animation: none !important;
+}
+
+html[data-dbg-nograin] .field__grain {
+  display: none !important;
+}
+
+html[data-dbg-noisolate] #root {
+  isolation: auto !important;
+}
+
+/* Framer Motion sets opacity/transform via plain (non-!important) inline
+   style, so a stylesheet !important rule reliably wins over it regardless
+   of when React re-renders. */
+html[data-dbg-nosonganim] .fade-transition {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+html[data-dbg-flat] .field__pools,
+html[data-dbg-flat] .field__grain {
+  display: none !important;
+}
+/** ==================== end temporary file ==================== */
