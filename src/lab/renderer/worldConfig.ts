@@ -1,249 +1,354 @@
 /**
- * Authored visual configuration for the V2 laboratory.
+ * V2 Lab — Structural Form Configurations.
  *
- * Each song has a PhaseConfig that describes a world of layered oval "pools"
- * — soft luminous volumes composited with Canvas 2D screen blending. Pools
- * are organized into three depth levels (far / mid / near), each with
- * authored drift and audio-response parameters.
+ * Each phase is defined as an array of "forms" — abstract shapes rendered as
+ * filled bezier paths with depth-ordered compositing. This replaces the V1
+ * soft-radial-blob approach.
  *
- * The key visual differentiators from V1 PersistentWorld:
- *   - Rotated ovals, not circles — shapes have orientation and character.
- *   - Differential depth separation driven by audio frequency bands.
- *   - Strong vignette framing the composition cinematically.
- *   - Chromatic separation on near-layer transients.
- *   - Screen+multiply compositing vs. screen-only.
+ * KEY DESIGN PRINCIPLES (learned from V1 failure):
+ *  - Forms are structural, not atmospheric — they have clear edges and occlude
+ *    each other based on depth ordering (far rendered first, near last).
+ *  - DÜN: covers ~70% of the canvas — dense, compressed, "trapped inside."
+ *    The structures extend beyond the viewport; you cannot see the whole thing.
+ *  - YARIN: covers ~40-45% of the canvas — the same type of world seen from
+ *    a distance. One near form + one tiny far form creates an 8:1 scale ratio
+ *    that communicates "enormous apparent depth" in a still image.
+ *  - The distinction must survive grayscale conversion with no labels.
  *
- * DÜN: close, compressed, intimate — bass creates "spatial pressure."
- * YARIN: expansive, deep, spatial — energy "opens" the world outward.
+ * Anchors are Catmull-Rom control points in fractional canvas coordinates:
+ * (0,0) = top-left, (1,1) = bottom-right, values outside [0,1] extend off-screen.
+ * The renderer connects them as a smooth closed bezier path.
  */
 
-export interface PoolConfig {
-  /** Position as fraction of viewport: 0=left/top, 1=right/bottom */
-  x: number;
-  y: number;
-  /** Horizontal radius as fraction of canvas height */
-  rx: number;
-  /** Vertical radius as fraction of canvas height */
-  ry: number;
-  /** Shape rotation in radians */
-  rotation: number;
-  /**
-   * Depth in scene: 0 = farthest (barely moves), 1 = nearest (most responsive).
-   * Drives parallax separation, drift amplitude inheritance, and which audio
-   * band modulates luminance.
-   */
+export interface FormConfig {
+  id: string;
+  /** Catmull-Rom anchor points [x,y], fractions of canvas width/height */
+  anchors: [number, number][];
+  /** 0 = farthest, 1 = nearest. Determines draw order + visual treatment. */
   depth: number;
-  /** HSL color. Rendered with screen blend — rich, mid-lightness works best. */
+  /** Fill color — HSL */
   hue: number;
   sat: number;
   lit: number;
-  /** Peak alpha in screen composite. 0.15–0.55 on near-black yields luminous depth. */
-  alpha: number;
-  /** Autonomous drift in canvas-height fractions and radians/second */
-  driftXAmp: number;
-  driftYAmp: number;
-  driftXFreq: number; // rad/s
-  driftYFreq: number;
-  driftXPhase: number; // initial phase (radians)
-  driftYPhase: number;
-  rotDriftAmp: number;  // radians
-  rotDriftFreq: number; // rad/s
-  rotDriftPhase: number;
+  /** Fill opacity in source-over blend */
+  fillAlpha: number;
   /**
-   * Preferred direction for transient-driven spring kick (unit vector).
-   * Each pool should differ so transients produce complex spatial motion,
-   * not uniform pulsing.
+   * Linear gradient direction (degrees from horizontal):
+   * 0=right, 90=down, 135=lower-right. Applied inside the bezier shape.
+   * Creates directional-lighting quality distinct from blob radial-gradients.
    */
-  dispDirX: number;
-  dispDirY: number;
+  gradAngle: number;
+  /** Gradient bright/shadow ratio: 0-1 how much lighter the bright face is */
+  gradStrength: number;
+  /** Edge stroke (screen blend). 0 = no edge. Applied to near forms only. */
+  edgeLitBoost: number;  // how much lighter the edge color is
+  edgeAlpha: number;
+  edgeWidth: number;
+  /** Autonomous drift (fraction of canvas per oscillation, rad/s, phase) */
+  driftAmpX: number;
+  driftAmpY: number;
+  driftFreqX: number;
+  driftFreqY: number;
+  driftPhaseX: number;
+  driftPhaseY: number;
+  /** How strongly this form responds to transient kicks (multiplier) */
+  transientScale: number;
+  /** Preferred transient displacement direction (unit vector) */
+  transientDirX: number;
+  transientDirY: number;
+  /**
+   * How strongly this form's gap to adjacent forms responds to audio energy:
+   * positive = expands with energy, negative = compresses with energy.
+   * Applied as an offset to ALL this form's anchors (a translation).
+   */
+  energyDriftScale: number;
+  energyDriftDirX: number;
+  energyDriftDirY: number;
+}
+
+export interface AuthoredMoment {
+  /** Which form's anchors to translate */
+  formIdx: number;
+  /** Time range (renderer wall-clock, not playback position) */
+  t0: number;
+  t1: number;
+  /** Translation applied to all anchors at full interpolation, fractions of canvas */
+  dx: number;
+  dy: number;
+  /** If set, fillAlpha fades from 0 to authored value over t0→t1 */
+  fadeIn?: boolean;
 }
 
 export interface PhaseConfig {
   id: "dun" | "yarin";
-  /** Background base color (HSLA) */
   bgH: number;
   bgS: number;
   bgL: number;
-  /**
-   * Per-frame trail fraction: how much background is repainted each frame.
-   * 0.15 = long atmospheric trail; 0.35 = brief, crisper motion trail.
-   * Energy tightens this further (more responsive during loud moments).
-   */
+  /** Vignette strength: 0=no vignette, 1=very strong */
+  vignetteStrength: number;
+  /** Per-frame trail opacity (lower = longer atmospheric trail) */
   trailAlpha: number;
-  pools: PoolConfig[];
+  forms: FormConfig[];
+  /** Authored development moments (time-based interpolated shifts) */
+  moments: AuthoredMoment[];
   /**
-   * Base depth-parallax scale: how much the near/far split creates apparent
-   * spatial separation. Higher = more visible depth between layers.
-   */
-  depthParallax: number;
-  /**
-   * How audio energy modulates depth separation per frame.
-   *   DÜN  (negative) — bass compresses layers together ("spatial pressure").
-   *   YARIN (positive) — energy expands layers apart ("the world opens").
-   */
-  energyDepthK: number;
-  /**
-   * Transient displacement strength in canvas-height units per unit transient.
-   * Near pools are additionally scaled by their depth value.
+   * Transient strength: amplitude of spring displacement in canvas-height units
+   * per unit transient signal.
    */
   transientStrength: number;
+  /**
+   * Interform energy response: how strongly audio energy alters the
+   * "depth separation" feeling (not whole-form translation — the energy
+   * multiplier applied to each form's energyDriftScale).
+   */
+  energyResponseScale: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DÜN — memory: close, layered, compressed, imperfectly aligned, intimate
-// Bass creates spatial pressure. Transients produce restrained optical kicks.
-// Colors: deep warm amber, muted copper-rose, dark teal, recessive violet.
+// DÜN — compressed, dense, close, trapped inside the structure
+// Coverage: ~70% of canvas area. Background barely visible through form gaps.
+// Palette: deep warm amber, teal-green, plum-violet, copper-bronze.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const dunPools: PoolConfig[] = [
-  // ── Far layer (depth 0.08–0.15) ─────────────────────────────────────────
-  // These barely move — they are the weight of memory itself.
-  {
-    x: 0.38, y: 0.56,
-    rx: 0.52, ry: 0.43, rotation: 0.28,
-    depth: 0.08,
-    hue: 35, sat: 65, lit: 38, alpha: 0.26,
-    driftXAmp: 0.008, driftYAmp: 0.005, driftXFreq: 0.18, driftYFreq: 0.13,
-    driftXPhase: 0.0, driftYPhase: 1.1,
-    rotDriftAmp: 0.04, rotDriftFreq: 0.07, rotDriftPhase: 0.0,
-    dispDirX: 0.3, dispDirY: -0.2,
-  },
-  {
-    x: 0.62, y: 0.41,
-    rx: 0.48, ry: 0.41, rotation: -0.22,
-    depth: 0.13,
-    hue: 272, sat: 38, lit: 28, alpha: 0.22,
-    driftXAmp: 0.007, driftYAmp: 0.006, driftXFreq: 0.14, driftYFreq: 0.20,
-    driftXPhase: 2.1, driftYPhase: 0.7,
-    rotDriftAmp: 0.035, rotDriftFreq: 0.09, rotDriftPhase: 1.4,
-    dispDirX: -0.4, dispDirY: 0.1,
-  },
-  // ── Mid layer (depth 0.42–0.50) ─────────────────────────────────────────
-  // The world's substance — moderate audio response, shaped asymmetrically.
-  {
-    x: 0.34, y: 0.40,
-    rx: 0.34, ry: 0.27, rotation: 0.52,
-    depth: 0.42,
-    hue: 192, sat: 55, lit: 24, alpha: 0.35,
-    driftXAmp: 0.018, driftYAmp: 0.014, driftXFreq: 0.31, driftYFreq: 0.24,
-    driftXPhase: 0.8, driftYPhase: 2.3,
-    rotDriftAmp: 0.07, rotDriftFreq: 0.13, rotDriftPhase: 0.5,
-    dispDirX: -0.6, dispDirY: -0.3,
-  },
-  {
-    x: 0.65, y: 0.63,
-    rx: 0.32, ry: 0.28, rotation: -0.38,
-    depth: 0.48,
-    hue: 18, sat: 52, lit: 30, alpha: 0.32,
-    driftXAmp: 0.016, driftYAmp: 0.013, driftXFreq: 0.27, driftYFreq: 0.35,
-    driftXPhase: 1.6, driftYPhase: 0.4,
-    rotDriftAmp: 0.06, rotDriftFreq: 0.16, rotDriftPhase: 2.0,
-    dispDirX: 0.5, dispDirY: 0.4,
-  },
-  // ── Near layer (depth 0.95) ──────────────────────────────────────────────
-  // Intimate foreground — most audio-responsive, most luminous.
-  {
-    x: 0.50, y: 0.53,
-    rx: 0.22, ry: 0.19, rotation: 0.18,
-    depth: 0.95,
-    hue: 38, sat: 72, lit: 44, alpha: 0.45,
-    driftXAmp: 0.010, driftYAmp: 0.008, driftXFreq: 0.22, driftYFreq: 0.30,
-    driftXPhase: 3.2, driftYPhase: 1.8,
-    rotDriftAmp: 0.05, rotDriftFreq: 0.20, rotDriftPhase: 0.9,
-    dispDirX: 0.1, dispDirY: -0.7,
-  },
-];
 
 export const dunConfig: PhaseConfig = {
   id: "dun",
-  bgH: 28, bgS: 12, bgL: 3,
-  trailAlpha: 0.30,       // brief, present trail — DÜN is immediate/compressed
-  pools: dunPools,
-  depthParallax: 0.06,    // small depth separation — layers feel close together
-  energyDepthK: -0.045,   // negative: bass compresses layers further (spatial pressure)
-  transientStrength: 0.022,
+  bgH: 24, bgS: 10, bgL: 3,
+  vignetteStrength: 0.65,   // was 0.85 — too aggressive in corners, hid F2 plum form
+  trailAlpha: 0.28,
+
+  forms: [
+    // ── F0: FAR amber — enters from upper-left, its bulk is off-screen ───────
+    // Visual reading: "an enormous structure whose right and lower edge we can barely see."
+    {
+      id: "f0",
+      anchors: [
+        [-0.22, 0.18],  // enters from left
+        [ 0.04,-0.10],  // exits top
+        [ 0.38,-0.05],  // just above top edge
+        [ 0.56, 0.12],  // first visible corner
+        [ 0.48, 0.32],  // curves down
+        [ 0.20, 0.38],  // lower visible edge
+        [-0.12, 0.30],  // exits left
+      ],
+      depth: 0.05,
+      hue: 34, sat: 55, lit: 20, fillAlpha: 0.18,
+      gradAngle: 135, gradStrength: 0.5,
+      edgeLitBoost: 0, edgeAlpha: 0, edgeWidth: 0,
+      driftAmpX: 0.006, driftAmpY: 0.004, driftFreqX: 0.15, driftFreqY: 0.11,
+      driftPhaseX: 0.0, driftPhaseY: 1.2,
+      transientScale: 0.0,
+      transientDirX: 0, transientDirY: 0,
+      energyDriftScale: -0.015, energyDriftDirX: 0.4, energyDriftDirY: 0.6,
+    },
+    // ── F1: MID teal — lower-right mass, extends off bottom and right ────────
+    {
+      id: "f1",
+      anchors: [
+        [ 0.26, 0.52],  // upper-left (on screen)
+        [ 0.65, 0.38],  // upper-center
+        [ 1.08, 0.48],  // exits right
+        [ 1.10, 1.10],  // off-screen corner
+        [ 0.62, 1.12],  // exits bottom
+        [ 0.10, 0.96],  // lower-left (on screen)
+        [ 0.06, 0.72],  // left side
+      ],
+      depth: 0.28,
+      hue: 183, sat: 60, lit: 22, fillAlpha: 0.60,
+      gradAngle: 45, gradStrength: 0.45,
+      edgeLitBoost: 0, edgeAlpha: 0, edgeWidth: 0,
+      driftAmpX: 0.012, driftAmpY: 0.009, driftFreqX: 0.22, driftFreqY: 0.18,
+      driftPhaseX: 1.4, driftPhaseY: 0.5,
+      transientScale: 0.4,
+      transientDirX: -0.3, transientDirY: 0.5,
+      energyDriftScale: -0.020, energyDriftDirX: -0.2, energyDriftDirY: -0.4,
+    },
+    // ── F2: MID-NEAR plum — upper-right wedge, partially behind/in-front F1 ─
+    {
+      id: "f2",
+      anchors: [
+        [ 0.46,-0.08],  // exits top
+        [ 0.90,-0.10],  // top-right off-screen
+        [ 1.15, 0.22],  // exits right
+        [ 1.10, 0.58],  // exits right (lower)
+        [ 0.80, 0.65],  // visible lower-right corner
+        [ 0.52, 0.55],  // visible interior
+        [ 0.40, 0.32],  // left side
+      ],
+      depth: 0.48,
+      hue: 270, sat: 50, lit: 32, fillAlpha: 0.68,  // was lit:24/alpha:0.55 — too dark for vignette corners
+      gradAngle: 225, gradStrength: 0.55,
+      edgeLitBoost: 18, edgeAlpha: 0.22, edgeWidth: 1.5,
+      driftAmpX: 0.015, driftAmpY: 0.010, driftFreqX: 0.28, driftFreqY: 0.20,
+      driftPhaseX: 2.2, driftPhaseY: 0.8,
+      transientScale: 0.6,
+      transientDirX: 0.5, transientDirY: -0.4,
+      energyDriftScale: -0.018, energyDriftDirX: -0.5, energyDriftDirY: 0.3,
+    },
+    // ── F3: NEAR copper-bronze — diagonal swath, the most prominent form ─────
+    // This is the near-field element: higher saturation, luminous edge, proper occlusion.
+    {
+      id: "f3",
+      anchors: [
+        [-0.12, 0.52],  // enters from left
+        [ 0.10, 0.32],  // upper-left area
+        [ 0.40, 0.28],  // center-upper
+        [ 0.68, 0.40],  // center-right
+        [ 0.74, 0.65],  // lower-right
+        [ 0.44, 0.76],  // lower-center
+        [ 0.06, 0.78],  // lower-left
+      ],
+      depth: 0.88,
+      hue: 28, sat: 68, lit: 35, fillAlpha: 0.70,
+      gradAngle: 45, gradStrength: 0.60,
+      edgeLitBoost: 22, edgeAlpha: 0.42, edgeWidth: 1.8,
+      driftAmpX: 0.008, driftAmpY: 0.006, driftFreqX: 0.18, driftFreqY: 0.25,
+      driftPhaseX: 3.0, driftPhaseY: 1.6,
+      transientScale: 1.0,
+      transientDirX: 0.2, transientDirY: -0.6,
+      energyDriftScale: -0.022, energyDriftDirX: 0.0, energyDriftDirY: -0.5,
+    },
+  ],
+
+  moments: [
+    // t=8-12s: Near form (F3) presses down-right — increased overlap with F1.
+    // Effect: "spatial pressure" — the compression the brief describes.
+    { formIdx: 3, t0: 8, t1: 12, dx: 0.025, dy: 0.040 },
+    // t=25-30s: Teal mass (F1) shifts slightly upper-left — new gap / recomposition.
+    { formIdx: 1, t0: 25, t1: 30, dx: -0.035, dy: -0.028 },
+  ],
+
+  transientStrength: 0.028,
+  energyResponseScale: 1.0,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// YARIN — possibility: expansive, deep, open, spatial, spectral
-// Energy expands the world. Broad displacement. Scale and parallax matter more.
-// Colors: deep cobalt, indigo-magenta, spectral teal, rich near-field magenta.
+// YARIN — vast, open, spacious, "the camera has escaped DÜN"
+//
+// The depth argument is a SCALE RATIO, not a color effect:
+//   F0 (very far): tiny form, ~18% of canvas width, visible from t=0
+//   F2 (near):     large form, ~65% of canvas width on the right
+//   That 3.5:1 scale ratio reads as enormous depth in a still, in grayscale.
+//
+// Void: ~50% of canvas is black background (left-center and lower-left).
+// The emptiness IS the spatial claim.
+//
+// Fixed from V2a: F0 now starts at fillAlpha=0.22 (visible immediately),
+// edge rendering no longer gated on depth, vignette reduced from 0.78→0.60.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const yarinPools: PoolConfig[] = [
-  // ── Far layer (depth 0.05–0.08) ─────────────────────────────────────────
-  // Vast, barely moving — the suggestion of enormous space behind the screen.
-  {
-    x: 0.44, y: 0.42,
-    rx: 0.72, ry: 0.64, rotation: 0.10,
-    depth: 0.05,
-    hue: 222, sat: 75, lit: 28, alpha: 0.20,
-    driftXAmp: 0.006, driftYAmp: 0.004, driftXFreq: 0.10, driftYFreq: 0.08,
-    driftXPhase: 0.0, driftYPhase: 0.6,
-    rotDriftAmp: 0.025, rotDriftFreq: 0.05, rotDriftPhase: 0.0,
-    dispDirX: 0.2, dispDirY: 0.1,
-  },
-  {
-    x: 0.59, y: 0.62,
-    rx: 0.65, ry: 0.54, rotation: -0.42,
-    depth: 0.08,
-    hue: 285, sat: 52, lit: 24, alpha: 0.18,
-    driftXAmp: 0.005, driftYAmp: 0.005, driftXFreq: 0.08, driftYFreq: 0.12,
-    driftXPhase: 2.4, driftYPhase: 1.2,
-    rotDriftAmp: 0.022, rotDriftFreq: 0.06, rotDriftPhase: 1.8,
-    dispDirX: -0.3, dispDirY: -0.2,
-  },
-  // ── Mid layer (depth 0.48–0.52) ─────────────────────────────────────────
-  {
-    x: 0.32, y: 0.50,
-    rx: 0.40, ry: 0.30, rotation: 0.58,
-    depth: 0.48,
-    hue: 178, sat: 62, lit: 26, alpha: 0.38,
-    driftXAmp: 0.022, driftYAmp: 0.018, driftXFreq: 0.24, driftYFreq: 0.18,
-    driftXPhase: 0.5, driftYPhase: 2.0,
-    rotDriftAmp: 0.08, rotDriftFreq: 0.10, rotDriftPhase: 1.0,
-    dispDirX: -0.7, dispDirY: 0.2,
-  },
-  {
-    x: 0.67, y: 0.34,
-    rx: 0.38, ry: 0.33, rotation: -0.58,
-    depth: 0.52,
-    hue: 212, sat: 70, lit: 32, alpha: 0.35,
-    driftXAmp: 0.020, driftYAmp: 0.016, driftXFreq: 0.20, driftYFreq: 0.28,
-    driftXPhase: 1.8, driftYPhase: 0.3,
-    rotDriftAmp: 0.075, rotDriftFreq: 0.12, rotDriftPhase: 2.5,
-    dispDirX: 0.6, dispDirY: -0.4,
-  },
-  // ── Near layer (depth 0.85–0.92) ────────────────────────────────────────
-  // Two near pools — binocular depth, chromatic separation on strong transients.
-  {
-    x: 0.46, y: 0.38,
-    rx: 0.26, ry: 0.23, rotation: 0.22,
-    depth: 0.92,
-    hue: 310, sat: 58, lit: 30, alpha: 0.48,
-    driftXAmp: 0.012, driftYAmp: 0.010, driftXFreq: 0.28, driftYFreq: 0.20,
-    driftXPhase: 2.8, driftYPhase: 0.9,
-    rotDriftAmp: 0.06, rotDriftFreq: 0.18, rotDriftPhase: 0.3,
-    dispDirX: 0.3, dispDirY: -0.8,
-  },
-  {
-    x: 0.54, y: 0.64,
-    rx: 0.23, ry: 0.21, rotation: -0.18,
-    depth: 0.85,
-    hue: 192, sat: 65, lit: 28, alpha: 0.42,
-    driftXAmp: 0.011, driftYAmp: 0.009, driftXFreq: 0.32, driftYFreq: 0.24,
-    driftXPhase: 1.3, driftYPhase: 3.0,
-    rotDriftAmp: 0.055, rotDriftFreq: 0.22, rotDriftPhase: 1.6,
-    dispDirX: -0.4, dispDirY: 0.6,
-  },
-];
 
 export const yarinConfig: PhaseConfig = {
   id: "yarin",
-  bgH: 222, bgS: 18, bgL: 3,
-  trailAlpha: 0.20,       // longer, more atmospheric trail — YARIN is dreamlike
-  pools: yarinPools,
-  depthParallax: 0.14,    // large depth separation — vast apparent space
-  energyDepthK: 0.08,     // positive: energy expands layers (the world opens)
-  transientStrength: 0.038,
+  bgH: 222, bgS: 16, bgL: 3,
+  vignetteStrength: 0.60,   // reduced from 0.78 — far forms visible in corners/edges
+  trailAlpha: 0.22,
+
+  forms: [
+    // ── F0: VERY FAR spectral teal — the depth anchor ────────────────────────
+    // ~18% × 16% of canvas, upper-left area (in the void).
+    // Visible from the first frame — the depth argument can't wait for t=8s.
+    // The contrast between this and F2 (3.5× wider) is the spatial statement.
+    {
+      id: "f0",
+      anchors: [
+        [ 0.14, 0.14],
+        [ 0.22, 0.08],
+        [ 0.32, 0.12],
+        [ 0.34, 0.22],
+        [ 0.26, 0.28],
+        [ 0.14, 0.24],
+        [ 0.10, 0.18],
+      ],
+      depth: 0.02,
+      hue: 178, sat: 68, lit: 44, fillAlpha: 0.22,  // visible from start (was 0.0 — invisible)
+      gradAngle: 90, gradStrength: 0.45,
+      edgeLitBoost: 28, edgeAlpha: 0.55, edgeWidth: 1.5,  // edge critical at small size
+      driftAmpX: 0.004, driftAmpY: 0.003, driftFreqX: 0.08, driftFreqY: 0.06,
+      driftPhaseX: 0.0, driftPhaseY: 0.8,
+      transientScale: 0.0,
+      transientDirX: 0, transientDirY: 0,
+      energyDriftScale: 0.0, energyDriftDirX: 0, energyDriftDirY: 0,
+    },
+    // ── F1: MID-FAR rose-magenta — bottom-left, clearly secondary ────────────
+    // Smaller than F2 (it's farther). Peeks in from the lower-left.
+    // Purposely less prominent than in V2a to let F2 dominate.
+    {
+      id: "f1",
+      anchors: [
+        [-0.25, 0.55],  // enters from left (lower)
+        [-0.05, 0.38],  // upper-left visible
+        [ 0.22, 0.45],  // right side of form
+        [ 0.18, 0.72],  // lower-right
+        [-0.08, 0.85],  // lower area
+        [-0.30, 0.75],  // exits left
+      ],
+      depth: 0.22,
+      hue: 308, sat: 55, lit: 28, fillAlpha: 0.48,  // reduced from 0.55 — secondary role
+      gradAngle: 315, gradStrength: 0.50,
+      edgeLitBoost: 18, edgeAlpha: 0.28, edgeWidth: 1.3,
+      driftAmpX: 0.010, driftAmpY: 0.008, driftFreqX: 0.18, driftFreqY: 0.14,
+      driftPhaseX: 1.8, driftPhaseY: 0.4,
+      transientScale: 0.3,
+      transientDirX: -0.5, transientDirY: 0.3,
+      energyDriftScale: 0.012, energyDriftDirX: -0.7, energyDriftDirY: 0.2,
+    },
+    // ── F2: NEAR cobalt — right-dominant, the largest form ───────────────────
+    // Clearly the largest element. Scale vs F0 = depth.
+    // Extends beyond the right and top edges — "can't see the whole thing."
+    {
+      id: "f2",
+      anchors: [
+        [ 0.30, 0.12],  // upper-left (visible)
+        [ 0.72, 0.04],  // upper area
+        [ 1.08, 0.20],  // exits right (top)
+        [ 1.10, 0.68],  // exits right (bottom)
+        [ 0.82, 0.96],  // lower-right visible
+        [ 0.45, 0.92],  // lower area
+        [ 0.26, 0.70],  // lower-left
+        [ 0.25, 0.38],  // left side
+      ],
+      depth: 0.90,
+      hue: 218, sat: 80, lit: 34, fillAlpha: 0.82,  // increased from 0.75 — dominant
+      gradAngle: 330, gradStrength: 0.62,
+      edgeLitBoost: 22, edgeAlpha: 0.42, edgeWidth: 2.0,
+      driftAmpX: 0.006, driftAmpY: 0.005, driftFreqX: 0.13, driftFreqY: 0.17,
+      driftPhaseX: 2.6, driftPhaseY: 1.0,
+      transientScale: 0.8,
+      transientDirX: 0.3, transientDirY: -0.5,
+      energyDriftScale: 0.022, energyDriftDirX: 0.3, energyDriftDirY: -0.3,
+    },
+    // ── F3: MID-FAR indigo — upper-right peeking behind F2 ───────────────────
+    {
+      id: "f3",
+      anchors: [
+        [ 0.62, 0.02],
+        [ 0.90, -0.02],
+        [ 1.12, 0.16],
+        [ 1.04, 0.38],
+        [ 0.80, 0.42],
+        [ 0.62, 0.28],
+        [ 0.54, 0.10],
+      ],
+      depth: 0.18,
+      hue: 244, sat: 58, lit: 28, fillAlpha: 0.40,
+      gradAngle: 210, gradStrength: 0.45,
+      edgeLitBoost: 15, edgeAlpha: 0.22, edgeWidth: 1.0,
+      driftAmpX: 0.008, driftAmpY: 0.006, driftFreqX: 0.16, driftFreqY: 0.12,
+      driftPhaseX: 0.6, driftPhaseY: 2.2,
+      transientScale: 0.2,
+      transientDirX: 0.5, transientDirY: -0.3,
+      energyDriftScale: 0.010, energyDriftDirX: 0.5, energyDriftDirY: -0.2,
+    },
+  ],
+
+  moments: [
+    // t=8-14s: F0 brightens further — "the far form becomes more present."
+    // It was already visible; now it asserts itself as a deliberate element.
+    // dx=0 so no translation — just the alpha increase via fadeIn flag.
+    { formIdx: 0, t0: 8, t1: 14, dx: 0, dy: 0, fadeIn: true },
+    // t=25-30s: Near form (F2) expands outward — presses toward the viewer.
+    { formIdx: 2, t0: 25, t1: 30, dx: 0.042, dy: 0.0 },
+  ],
+
+  transientStrength: 0.040,
+  energyResponseScale: 1.0,
 };

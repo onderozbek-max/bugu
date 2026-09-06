@@ -1,71 +1,111 @@
 /**
- * Canvas 2D renderer for the V2 visual laboratory.
+ * V2 Canvas 2D Renderer — Structural Form System.
  *
- * Runs its own requestAnimationFrame loop — deliberately decoupled from React
- * state. React mounts/unmounts the canvas; this class owns all drawing.
+ * Renders abstract structural forms (closed bezier paths) at different virtual
+ * depths with proper occlusion, directional lighting gradients, and luminous
+ * edge strokes on near-field elements.
  *
- * Visual system overview:
- *   - 5–6 oval "pools" per phase, organized into far/mid/near depth layers.
- *   - Screen-blend compositing on near-black creates luminous depth without
- *     additive brightness from overlaps.
- *   - Strong radial vignette on top with multiply blend for cinematic framing.
- *   - Per-pool spring physics for transient-driven displacement kicks.
- *   - Depth-parallax: audio energy modulates apparent layer separation.
- *   - Chromatic separation on near-layer pools during strong transients.
- *   - Partial-clear trail each frame for atmospheric motion blur.
+ * ARCHITECTURE:
+ *   - Completely decoupled from React. No state, no setState, no context.
+ *   - Own rAF loop started/stopped by the lab React component.
+ *   - All coordinates in logical CSS pixels; DPR handled in resize().
+ *   - Audio signals read once per frame from a provided getter function.
  *
- * Performance notes:
- *   - 5–6 filled arc + radial-gradient ops per frame at 60fps is well within
- *     Canvas 2D capacity on modern mobile (well under 2ms of GPU time).
- *   - No per-pixel computation; no external textures; no CSS filter on the
- *     canvas element (avoids compositing-layer issues on mobile Safari).
- *   - If a frame takes longer than 25ms, the renderer simply draws less
- *     frequently — rAF naturally throttles to display refresh rate.
+ * DEPTH SYSTEM:
+ *   Forms drawn far→near. Each form's `fillAlpha` creates partial transparency
+ *   so deeper forms bleed through, while high-depth (near) forms still dominate.
+ *   The `source-over` composite for fills means near forms genuinely occlude far.
+ *   Edge strokes use `screen` blend for luminous crispness without covering the fill.
+ *
+ * VISUAL DIFFERENTIATORS FROM V1:
+ *   1. Bezier polygon shapes — not radial-gradient circles.
+ *   2. Directional (linear) gradient fill — not center-radiating glow.
+ *   3. Proper depth occlusion (far forms hidden behind near forms).
+ *   4. Luminous edge stroke on near forms only.
+ *   5. Strong vignette (multiply) for cinematic framing.
+ *   6. Authored time-based moments that change inter-form relationships.
+ *   7. Audio changes inter-form separation, not whole-form scale.
  */
 
-import type { PhaseConfig, PoolConfig } from "./worldConfig";
+import type { PhaseConfig, FormConfig, AuthoredMoment } from "./worldConfig";
 import type { AudioSignals } from "./AudioAnalyzer";
 
-interface PoolState {
-  x: number;          // current position (fraction of width)
-  y: number;          // current position (fraction of height)
-  rotation: number;   // current rotation (radians)
-  dispX: number;      // spring displacement (pixels)
-  dispY: number;
-  velX: number;       // spring velocity (pixels/s)
-  velY: number;
-  scaleX: number;     // current radius multiplier
-  scaleY: number;
-  chromatic: number;  // chromatic-separation magnitude (fraction of height)
-  chromaticDecay: number;
+// Smooth interpolation
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
 }
 
-const SPRING_STIFFNESS = 14;  // oscillation speed
-const SPRING_DAMPING   = 0.62; // per-frame damping exponent base
+/**
+ * Convert Catmull-Rom anchor points to cubic bezier segments.
+ * Returns an array of {cp1x, cp1y, cp2x, cp2y, x, y} for use with
+ * ctx.bezierCurveTo().
+ */
+function catmullRomToBezier(
+  pts: [number, number][],
+  w: number, h: number,
+  tension = 0.5
+): { cp1x: number; cp1y: number; cp2x: number; cp2y: number; x: number; y: number }[] {
+  const n = pts.length;
+  const result = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[(i + 2) % n];
+    // Control points in canvas logical pixels
+    const cp1x = p1[0] * w + (p2[0] - p0[0]) * w * tension / 6;
+    const cp1y = p1[1] * h + (p2[1] - p0[1]) * h * tension / 6;
+    const cp2x = p2[0] * w - (p3[0] - p1[0]) * w * tension / 6;
+    const cp2y = p2[1] * h - (p3[1] - p1[1]) * h * tension / 6;
+    result.push({ cp1x, cp1y, cp2x, cp2y, x: p2[0] * w, y: p2[1] * h });
+  }
+  return result;
+}
 
-// Detect once at module load — doesn't change during the session.
+interface FormState {
+  /** Per-form spring displacement (pixels) for transient kicks */
+  dispX: number;
+  dispY: number;
+  velX:  number;
+  velY:  number;
+  /** Current effective fillAlpha (modified by authored fade-ins) */
+  effectiveAlpha: number;
+  /** Current energy-driven drift offset (pixels) */
+  energyOffX: number;
+  energyOffY: number;
+}
+
 const PREFERS_REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const SPRING_K    = 12.0;
+const SPRING_DAMP = 0.60;
 
 export class WorldRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
 
   private config: PhaseConfig | null = null;
-  private poolStates: PoolState[] = [];
+  private formStates: FormState[] = [];
   private raf: number | null = null;
-  private lastTimestamp: number | null = null;
-  private elapsed = 0;           // total time since start (seconds)
+
+  private elapsed   = 0;   // total wall-clock time (seconds)
+  private lastTime: number | null = null;
   private isPlaying = false;
   private prevTransient = 0;
 
   private getSignals: (() => AudioSignals) | null = null;
 
+  // Logical pixel dimensions (post-DPR transform)
+  private lw = 0;
+  private lh = 0;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas 2D unavailable");
+    if (!ctx) throw new Error("Canvas 2D context unavailable");
     this.ctx = ctx;
   }
 
@@ -73,7 +113,13 @@ export class WorldRenderer {
 
   setConfig(config: PhaseConfig): void {
     this.config = config;
-    this.initPoolStates(config.pools);
+    this.formStates = config.forms.map((f) => ({
+      dispX: 0, dispY: 0, velX: 0, velY: 0,
+      effectiveAlpha: f.fillAlpha,
+      energyOffX: 0, energyOffY: 0,
+    }));
+    this.elapsed = 0; // restart authored moments on song switch
+    this.prevTransient = 0;
   }
 
   setSignalsProvider(fn: (() => AudioSignals) | null): void {
@@ -86,7 +132,7 @@ export class WorldRenderer {
 
   start(): void {
     if (this.raf !== null) return;
-    this.lastTimestamp = null;
+    this.lastTime = null;
     this.raf = requestAnimationFrame(this.onFrame);
   }
 
@@ -99,34 +145,26 @@ export class WorldRenderer {
 
   resize(): void {
     const dpr = window.devicePixelRatio || 1;
-    this.canvas.width  = this.canvas.offsetWidth  * dpr;
-    this.canvas.height = this.canvas.offsetHeight * dpr;
-    this.ctx.scale(dpr, dpr);
+    const w = this.canvas.offsetWidth;
+    const h = this.canvas.offsetHeight;
+    this.canvas.width  = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    // Scale context so all draw calls use logical pixels
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.lw = w;
+    this.lh = h;
   }
 
-  // ─── Internal ────────────────────────────────────────────────────────────
+  // ─── Frame loop ──────────────────────────────────────────────────────────
 
-  private initPoolStates(pools: PoolConfig[]): void {
-    this.poolStates = pools.map((p) => ({
-      x: p.x,
-      y: p.y,
-      rotation: p.rotation,
-      dispX: 0, dispY: 0,
-      velX: 0,  velY: 0,
-      scaleX: 1, scaleY: 1,
-      chromatic: 0,
-      chromaticDecay: 0,
-    }));
-  }
-
-  private onFrame = (timestamp: number): void => {
-    const dt = this.lastTimestamp === null
+  private onFrame = (ts: number): void => {
+    const dt = this.lastTime === null
       ? 0
-      : Math.min((timestamp - this.lastTimestamp) / 1000, 0.05); // cap at 50ms
-    this.lastTimestamp = timestamp;
+      : Math.min((ts - this.lastTime) / 1000, 0.05);
+    this.lastTime = ts;
     this.elapsed += dt;
 
-    if (this.config && this.poolStates.length > 0) {
+    if (this.config && this.formStates.length > 0 && this.lw > 0) {
       const signals = this.getSignals?.() ?? null;
       this.update(dt, signals);
       this.draw(signals);
@@ -135,215 +173,234 @@ export class WorldRenderer {
     this.raf = requestAnimationFrame(this.onFrame);
   };
 
-  // ─── Update (physics + audio response) ───────────────────────────────────
+  // ─── Physics update ──────────────────────────────────────────────────────
 
   private update(dt: number, signals: AudioSignals | null): void {
-    const config = this.config!;
-    const pools  = config.pools;
-    const w      = this.canvas.offsetWidth;
-    const h      = this.canvas.offsetHeight;
-    const t      = this.elapsed;
+    const config  = this.config!;
+    const t       = this.elapsed;
+    const w       = this.lw;
+    const h       = this.lh;
 
-    // Transient pulse: how much transient *increased* this frame
-    const transient     = signals?.transient ?? 0;
-    const transientDiff = Math.max(0, transient - this.prevTransient - 0.04);
-    this.prevTransient  = transient;
+    // Transient pulse: how much transient signal increased this frame
+    const tr     = signals?.transient ?? 0;
+    const trPulse = Math.max(0, tr - this.prevTransient - 0.05);
+    this.prevTransient = tr;
 
-    // Depth separation: base + audio modulation
-    // DÜN  (energyDepthK < 0): bass compresses layers together
-    // YARIN (energyDepthK > 0): energy pushes layers apart
-    let depthSep = config.depthParallax;
-    if (signals) {
-      depthSep += signals.bass * config.energyDepthK;
-      depthSep  = Math.max(0.005, depthSep);
-    }
+    // Authored moments: time-based translations applied per-form
+    const momentOffsets = this.computeMomentOffsets(config.moments, t, config.forms);
 
-    const driftScale = PREFERS_REDUCED_MOTION ? 0.08 : 1.0;
+    for (let i = 0; i < config.forms.length; i++) {
+      const f = config.forms[i];
+      const s = this.formStates[i];
 
-    for (let i = 0; i < pools.length; i++) {
-      const p = pools[i];
-      const s = this.poolStates[i];
-
-      // ── Autonomous drift ────────────────────────────────────────────────
-      const driftX = Math.sin(t * p.driftXFreq + p.driftXPhase) * p.driftXAmp * driftScale;
-      const driftY = Math.cos(t * p.driftYFreq + p.driftYPhase) * p.driftYAmp * driftScale;
-      const driftR = Math.sin(t * p.rotDriftFreq + p.rotDriftPhase) * p.rotDriftAmp * driftScale;
-
-      // ── Depth-parallax offset ───────────────────────────────────────────
-      // Near pools (depth→1) shift more than far pools (depth→0) when audio
-      // energy is high. The differential creates apparent 3D depth separation.
-      const energy = signals?.energy ?? 0;
-      const bass   = signals?.bass ?? 0;
-      const parallaxX = (p.depth - 0.5) * depthSep * energy;
-      const parallaxY = (p.depth - 0.5) * depthSep * 0.35 * bass;
-
-      // ── Spring physics for transient kick ───────────────────────────────
-      if (transientDiff > 0 && !PREFERS_REDUCED_MOTION && this.isPlaying) {
-        const strength = transientDiff * config.transientStrength * h * (1 + p.depth * 0.9);
-        s.velX += p.dispDirX * strength;
-        s.velY += p.dispDirY * strength;
+      // ── Authored moment alpha fade-in ──────────────────────────────────
+      const { fadeInAlpha } = momentOffsets[i];
+      if (f.fillAlpha === 0 && fadeInAlpha !== undefined) {
+        s.effectiveAlpha = fadeInAlpha * f.fillAlpha; // only relevant for non-zero authored
+        // For the far tiny form: authored fillAlpha is 0, but we want to fade in to 0.28
+        // We store the "target" alpha separately
       }
-      // Damped spring toward origin
-      s.velX += (0 - s.dispX) * SPRING_STIFFNESS * dt;
-      s.velY += (0 - s.dispY) * SPRING_STIFFNESS * dt;
-      const dampFactor = Math.pow(SPRING_DAMPING, dt * 60);
-      s.velX *= dampFactor;
-      s.velY *= dampFactor;
+      // (Handled below where effectiveAlpha is computed for the fade-in form)
+
+      // ── Energy-driven inter-form drift ─────────────────────────────────
+      // This changes the RELATIONSHIP between forms (gap/overlap) rather
+      // than moving the whole world uniformly — avoids "bouncing" feel.
+      const energyMag = (signals?.bass ?? 0) * 0.6 + (signals?.energy ?? 0) * 0.4;
+      const targetEnergyOffX = f.energyDriftScale * energyMag
+        * config.energyResponseScale * f.energyDriftDirX * w;
+      const targetEnergyOffY = f.energyDriftScale * energyMag
+        * config.energyResponseScale * f.energyDriftDirY * h;
+      s.energyOffX += (targetEnergyOffX - s.energyOffX) * 0.08;
+      s.energyOffY += (targetEnergyOffY - s.energyOffY) * 0.08;
+
+      // ── Transient spring kick ──────────────────────────────────────────
+      if (trPulse > 0 && !PREFERS_REDUCED_MOTION && this.isPlaying) {
+        const strength = trPulse * config.transientStrength * h * f.transientScale;
+        s.velX += f.transientDirX * strength;
+        s.velY += f.transientDirY * strength;
+      }
+      s.velX += (0 - s.dispX) * SPRING_K * dt;
+      s.velY += (0 - s.dispY) * SPRING_K * dt;
+      const damp = Math.pow(SPRING_DAMP, dt * 60);
+      s.velX *= damp;
+      s.velY *= damp;
       s.dispX += s.velX * dt;
       s.dispY += s.velY * dt;
-
-      // ── Final position ──────────────────────────────────────────────────
-      s.x        = p.x + driftX + parallaxX + s.dispX / w;
-      s.y        = p.y + driftY + parallaxY + s.dispY / h;
-      s.rotation = p.rotation + driftR;
-
-      // ── Radius scaling (shape breathes with audio) ──────────────────────
-      let tSX = 1.0, tSY = 1.0;
-      if (signals && !PREFERS_REDUCED_MOTION) {
-        if (p.depth > 0.8) {
-          // Near: responsive to mid frequencies (human/intimate range)
-          tSX = 1.0 + signals.mid  * 0.28;
-          tSY = 1.0 + signals.mid  * 0.20;
-        } else if (p.depth > 0.35) {
-          // Mid: overall energy
-          tSX = 1.0 + signals.energy * 0.16;
-          tSY = 1.0 + signals.energy * 0.12;
-        } else {
-          // Far: bass (deep, slow, expansive)
-          tSX = 1.0 + signals.bass * 0.24;
-          tSY = 1.0 + signals.bass * 0.18;
-        }
-      }
-      s.scaleX += (tSX - s.scaleX) * 0.09;
-      s.scaleY += (tSY - s.scaleY) * 0.09;
-
-      // ── Chromatic separation (near pools on strong transients) ──────────
-      if (p.depth > 0.8 && transientDiff > 0.12 && !PREFERS_REDUCED_MOTION && this.isPlaying) {
-        s.chromatic      = Math.min(0.026, transientDiff * 0.038);
-        s.chromaticDecay = 0.86;
-      }
-      if (s.chromatic > 0.0005) {
-        s.chromatic      *= s.chromaticDecay;
-        s.chromaticDecay *= 0.89;
-      } else {
-        s.chromatic      = 0;
-        s.chromaticDecay = 0;
-      }
     }
   }
 
-  // ─── Draw ─────────────────────────────────────────────────────────────────
+  /**
+   * Compute per-form translation from authored moments.
+   * Returns an array of {offX (pixels), offY (pixels), fadeInAlpha} per form.
+   */
+  private computeMomentOffsets(
+    moments: AuthoredMoment[],
+    t: number,
+    forms: FormConfig[]
+  ): { offX: number; offY: number; fadeInAlpha?: number }[] {
+    const result = forms.map(() => ({ offX: 0, offY: 0 })) as {
+      offX: number; offY: number; fadeInAlpha?: number
+    }[];
+
+    for (const m of moments) {
+      const alpha = smoothstep(m.t0, m.t1, t);
+      result[m.formIdx].offX += m.dx * this.lw * alpha;
+      result[m.formIdx].offY += m.dy * this.lh * alpha;
+      if (m.fadeIn) {
+        result[m.formIdx].fadeInAlpha = alpha;
+      }
+    }
+    return result;
+  }
+
+  // ─── Rendering ───────────────────────────────────────────────────────────
 
   private draw(signals: AudioSignals | null): void {
     const config = this.config!;
     const ctx    = this.ctx;
-    // Use logical pixels (CSS pixels), not physical — ctx.scale(dpr) in resize()
-    const w      = this.canvas.offsetWidth;
-    const h      = this.canvas.offsetHeight;
+    const w      = this.lw;
+    const h      = this.lh;
+    const t      = this.elapsed;
 
-    // ── Trail / partial clear ────────────────────────────────────────────
-    // Painting background at <1 alpha creates motion trails: bright
-    // elements fade out over several frames rather than vanishing instantly.
-    // High energy tightens the trail (more responsive); quiet passages
-    // let the trail linger (more atmospheric).
-    let trailA = config.trailAlpha;
-    if (signals) {
-      trailA += signals.energy * (1 - config.trailAlpha) * 0.38;
-    }
+    // ── Background / trail ────────────────────────────────────────────────
+    // Partial clear: creates subtle motion persistence for form edges.
+    // Higher energy → more clearing (sharper motion); quiet → longer trail.
+    let trail = config.trailAlpha;
+    if (signals) trail += signals.energy * (1 - config.trailAlpha) * 0.35;
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = `hsla(${config.bgH}, ${config.bgS}%, ${config.bgL}%, ${trailA})`;
+    ctx.fillStyle = `hsla(${config.bgH}, ${config.bgS}%, ${config.bgL}%, ${trail})`;
     ctx.fillRect(0, 0, w, h);
 
-    // ── Pools: far → near, screen blend ─────────────────────────────────
-    ctx.globalCompositeOperation = "screen";
-    const pools = config.pools;
+    // ── Forms: far → near (source-over for proper occlusion) ─────────────
+    // Sort by depth ascending (0=far first, 1=near last)
+    const forms = [...config.forms];
+    const states = this.formStates;
+    const momentOffsets = this.computeMomentOffsets(config.moments, t, forms);
 
-    for (let i = 0; i < pools.length; i++) {
-      const p = pools[i];
-      const s = this.poolStates[i];
+    // Sort indices by depth so we render far→near
+    const order = forms.map((_, i) => i).sort((a, b) => forms[a].depth - forms[b].depth);
 
-      // Alpha scaled by audio frequency band appropriate to this depth layer
-      let alphaScale = 0.62;
+    for (const i of order) {
+      const f  = forms[i];
+      const s  = states[i];
+      const mo = momentOffsets[i];
+
+      // ── Effective alpha ─────────────────────────────────────────────────
+      let effectiveAlpha = f.fillAlpha;
+      if (mo.fadeInAlpha !== undefined) {
+        // fadeIn moment brightens the form from its authored fillAlpha to
+        // a higher value (1.8× authored, capped at 0.95). F0 in YARIN
+        // starts at fillAlpha=0.22 and rises to ~0.40 over t=8-14s.
+        const target = Math.min(0.95, f.fillAlpha * 1.8);
+        effectiveAlpha = f.fillAlpha + (target - f.fillAlpha) * mo.fadeInAlpha;
+      }
+      // Slight audio luminance response (far: bass, near: mid)
+      let alphaBoost = 0;
       if (signals) {
-        if (p.depth > 0.8) {
-          alphaScale = 0.72 + signals.mid    * 0.44; // near: mid-frequency band
-        } else if (p.depth > 0.35) {
-          alphaScale = 0.68 + signals.energy * 0.38; // mid: overall energy
-        } else {
-          alphaScale = 0.58 + signals.bass   * 0.50; // far: bass band
-        }
+        alphaBoost = f.depth > 0.7
+          ? signals.mid  * 0.15
+          : f.depth > 0.3
+          ? signals.energy * 0.12
+          : signals.bass   * 0.14;
       }
-      const alpha = p.alpha * alphaScale;
+      effectiveAlpha = Math.min(0.95, effectiveAlpha + effectiveAlpha * alphaBoost);
 
-      const cx = s.x * w;
-      const cy = s.y * h;
-      const rx = p.rx * h * s.scaleX;
-      const ry = p.ry * h * s.scaleY;
+      // ── Compute displaced anchor positions ──────────────────────────────
+      const driftScale = PREFERS_REDUCED_MOTION ? 0.08 : 1.0;
+      const totalOffX  = mo.offX + s.dispX + s.energyOffX;
+      const totalOffY  = mo.offY + s.dispY + s.energyOffY;
 
-      if (s.chromatic > 0.002) {
-        // Chromatic separation: draw R, G, B channels offset slightly
-        const off = s.chromatic * h;
-        this.drawPool(cx + off * 0.6,  cy + off * 0.3,  rx, ry, s.rotation,
-          p.hue + 14, p.sat, p.lit, alpha * 0.72);
-        this.drawPool(cx - off * 0.45, cy - off * 0.55, rx, ry, s.rotation,
-          p.hue - 18, p.sat, p.lit, alpha * 0.72);
-        this.drawPool(cx,              cy,               rx, ry, s.rotation,
-          p.hue, p.sat, p.lit, alpha);
-      } else {
-        this.drawPool(cx, cy, rx, ry, s.rotation, p.hue, p.sat, p.lit, alpha);
+      // Compute drifted and offset anchors
+      const driftedAnchors: [number, number][] = f.anchors.map((a, idx) => {
+        // Different drift phase per anchor to create organic deformation
+        // (not rigid body translation — makes the form feel alive at its edges)
+        const angleBase = (idx / f.anchors.length) * Math.PI * 2;
+        const dX = Math.sin(t * f.driftFreqX + f.driftPhaseX + angleBase * 0.3)
+          * f.driftAmpX * driftScale;
+        const dY = Math.cos(t * f.driftFreqY + f.driftPhaseY + angleBase * 0.4)
+          * f.driftAmpY * driftScale;
+        return [
+          a[0] + dX + totalOffX / w,
+          a[1] + dY + totalOffY / h,
+        ];
+      });
+
+      // ── Build bezier path ───────────────────────────────────────────────
+      const segs = catmullRomToBezier(driftedAnchors, w, h);
+      ctx.beginPath();
+      ctx.moveTo(driftedAnchors[0][0] * w, driftedAnchors[0][1] * h);
+      for (const seg of segs) {
+        ctx.bezierCurveTo(seg.cp1x, seg.cp1y, seg.cp2x, seg.cp2y, seg.x, seg.y);
+      }
+      ctx.closePath();
+
+      // ── Fill with directional-lighting gradient ─────────────────────────
+      // Compute the bounding box of this path's anchor points for gradient sizing
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const a of driftedAnchors) {
+        minX = Math.min(minX, a[0] * w);
+        maxX = Math.max(maxX, a[0] * w);
+        minY = Math.min(minY, a[1] * h);
+        maxY = Math.max(maxY, a[1] * h);
+      }
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const bw = maxX - minX;
+      const bh = maxY - minY;
+      const halfDiag = Math.sqrt(bw * bw + bh * bh) / 2;
+
+      const angle = (f.gradAngle * Math.PI) / 180;
+      const gx0   = cx - Math.cos(angle) * halfDiag;
+      const gy0   = cy - Math.sin(angle) * halfDiag;
+      const gx1   = cx + Math.cos(angle) * halfDiag;
+      const gy1   = cy + Math.sin(angle) * halfDiag;
+
+      const strength = f.gradStrength;
+      const lBright  = Math.min(100, f.lit * (1 + strength * 0.5));
+      const lDark    = Math.max(0,   f.lit * (1 - strength * 0.5));
+      const sBright  = f.sat;
+      const sDark    = Math.max(0, f.sat - 20);
+
+      const grad = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+      grad.addColorStop(0,    `hsla(${f.hue}, ${sBright}%, ${lBright}%, ${effectiveAlpha})`);
+      grad.addColorStop(0.55, `hsla(${f.hue}, ${f.sat}%,  ${f.lit}%, ${effectiveAlpha})`);
+      grad.addColorStop(1,    `hsla(${f.hue}, ${sDark}%,  ${lDark}%, ${effectiveAlpha * 0.55})`);
+
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // ── Luminous edge: any form with edgeAlpha > 0, screen blend ──────
+      // NOTE: was previously gated on depth > 0.3 (near-forms only), but that
+      // wrongly excluded YARIN's tiny far form, which relies on its edge to
+      // "read" at small scale against the dark background.
+      if (f.edgeAlpha > 0) {
+        const edgeLit = Math.min(100, f.lit + f.edgeLitBoost);
+        ctx.globalCompositeOperation = "screen";
+        ctx.strokeStyle = `hsla(${f.hue}, ${f.sat + 5}%, ${edgeLit}%, ${f.edgeAlpha})`;
+        ctx.lineWidth   = f.edgeWidth;
+        ctx.stroke();
+        ctx.globalCompositeOperation = "source-over";
       }
     }
 
-    // ── Vignette: multiply darkens edges, leaving center exposed ─────────
-    // This is the key visual differentiator from V1 PersistentWorld (no vignette).
-    // Creates cinematic framing and depth of field — focus toward center.
+    // ── Vignette: multiply to darken edges, focus center ─────────────────
+    // This is the cinematic frame absent from V1. Creates depth of field.
+    // Multiply: white = no change, black = fully darkened.
+    const vs = config.vignetteStrength;
+    const vcx = w * 0.5;
+    const vcy = h * 0.5;
+    const vInner = h * (0.25 - vs * 0.08);
+    const vOuter = h * (0.95 - vs * 0.10);
+    const vig = ctx.createRadialGradient(vcx, vcy, vInner, vcx, vcy, vOuter);
+    vig.addColorStop(0.0, "rgba(255,255,255,1)");
+    vig.addColorStop(0.5, `rgba(${Math.round(200 - vs * 80)},${Math.round(200 - vs * 80)},${Math.round(200 - vs * 80)},1)`);
+    vig.addColorStop(0.8, `rgba(${Math.round(60 - vs * 40)},${Math.round(60 - vs * 40)},${Math.round(60 - vs * 40)},1)`);
+    vig.addColorStop(1.0, "rgba(0,0,0,1)");
     ctx.globalCompositeOperation = "multiply";
-    const vCx = w * 0.5;
-    const vCy = h * 0.5;
-    const vInner = h * 0.28;
-    const vOuter = h * 0.92;
-    const vignette = ctx.createRadialGradient(vCx, vCy, vInner, vCx, vCy, vOuter);
-    // Multiply with white = no change; multiply with black = full darken
-    vignette.addColorStop(0.0,  "rgba(255,255,255,1)");
-    vignette.addColorStop(0.55, "rgba(180,180,180,1)");
-    vignette.addColorStop(0.82, "rgba( 60, 60, 60,1)");
-    vignette.addColorStop(1.0,  "rgba(  0,  0,  0,1)");
-    ctx.fillStyle = vignette;
+    ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
 
-    // Reset for next frame
     ctx.globalCompositeOperation = "source-over";
-  }
-
-  /**
-   * Draw a single oval luminous pool using an axis-aligned radial gradient
-   * scaled into an ellipse via ctx.scale(). Four gradient stops create a
-   * natural-looking light volume: bright core fading to transparent edge,
-   * with a non-linear falloff that avoids the "flat circle with glow edge"
-   * look of a simple 2-stop gradient.
-   */
-  private drawPool(
-    cx: number, cy: number,
-    rx: number, ry: number,
-    rotation: number,
-    hue: number, sat: number, lit: number, alpha: number
-  ): void {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(rotation);
-    ctx.scale(1, ry / rx); // circle → ellipse in the rotated frame
-
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
-    grad.addColorStop(0.00, `hsla(${hue}, ${sat}%, ${lit}%,       ${alpha})`);
-    grad.addColorStop(0.30, `hsla(${hue}, ${sat}%, ${lit * 0.78}%, ${alpha * 0.58})`);
-    grad.addColorStop(0.65, `hsla(${hue}, ${sat}%, ${lit * 0.52}%, ${alpha * 0.20})`);
-    grad.addColorStop(1.00, `hsla(${hue}, ${sat}%, ${lit * 0.30}%, 0)`);
-
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(0, 0, rx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   }
 }
