@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SongConfig } from "../config/songs";
 import { PlayPauseButton } from "../components/PlayPauseButton";
 import { ProgressBar } from "../components/ProgressBar";
@@ -10,10 +10,12 @@ import { usePrefetchNext } from "../audio/usePrefetchNext";
 import { formatTime } from "../audio/formatTime";
 import { useIdleFade } from "./useIdleFade";
 import { useSongPrepare } from "../audio/useSongPrepare";
-// TEMPORARY — production audio diagnostics only, see AudioEngine.ts banner
-// and useAudioDebugSnapshot.ts. Delete this import + the block that uses it
+// TEMPORARY — production audio diagnostics only, see AudioEngine.ts banner,
+// useAudioDebugSnapshot.ts, and deployedFileProbe.ts. Delete this import,
+// the useAudioDebugSnapshot import below, and the block that uses both,
 // once the deployed "Yüklenemedi" cause is confirmed.
 import { useAudioDebugSnapshot } from "../audio/useAudioDebugSnapshot";
+import { probeDeployedFile, type FileProbeResult } from "../audio/deployedFileProbe";
 import "./SongScreen.css";
 
 /**
@@ -78,6 +80,25 @@ export function SongScreen({
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const { currentTime, duration, isPlaying, hasError, isBuffering } = useAudioSnapshot();
   const debugSnapshot = useAudioDebugSnapshot(); // TEMPORARY diagnostics
+
+  // TEMPORARY — "DEPLOYED FILE PROBE": once every configured source has
+  // genuinely failed (hasError), directly fetch each of this song's real
+  // source URLs and report exactly what bytes came back, so an HTML error
+  // page / LFS pointer / truncated response is impossible to miss. Runs
+  // once per hasError transition (not on every render), so a single visit
+  // to the error state doesn't re-download multi-megabyte files repeatedly.
+  const [fileProbes, setFileProbes] = useState<FileProbeResult[] | null>(null);
+  const probedForSongRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasError) {
+      probedForSongRef.current = null;
+      return;
+    }
+    if (probedForSongRef.current === song.id) return;
+    probedForSongRef.current = song.id;
+    setFileProbes(null);
+    void Promise.all(song.sources.map((s) => probeDeployedFile(s.src))).then(setFileProbes);
+  }, [hasError, song.id, song.sources]);
   // Chrome should stay put while she's waiting on a stall, or once closing
   // has started — receding it during a buffer (or fading it twice at once)
   // would read as the screen having died, not settled.
@@ -215,6 +236,40 @@ export function SongScreen({
                       (e) =>
                         `  t=${e.t} ${e.type} rs=${e.readyState} ns=${e.networkState} err=${e.errorCode ?? "-"}`
                     ),
+                  ``,
+                  `===== DEPLOYED FILE PROBE =====`,
+                  fileProbes === null
+                    ? "(fetching...)"
+                    : fileProbes
+                        .map((p) =>
+                          [
+                            `--- ${p.requestedUrl} ---`,
+                            `final URL: ${p.finalUrl}`,
+                            `status: ${p.status}  ok: ${p.ok}`,
+                            `Content-Type: ${p.contentType ?? "null"}`,
+                            `Content-Length (header): ${p.contentLength ?? "null"}`,
+                            `Accept-Ranges: ${p.acceptRanges ?? "null"}`,
+                            `Content-Range: ${p.contentRange ?? "null"}`,
+                            `actual downloaded bytes: ${p.actualByteLength}`,
+                            `first 32 bytes (hex): ${p.first32Hex}`,
+                            `first 32 bytes (ascii): ${p.first32Ascii}`,
+                            p.looksLikeHtmlOrText ? `!!! LOOKS LIKE HTML/TEXT, NOT BINARY MEDIA !!!` : null,
+                            p.looksLikeLfsPointer ? `!!! LOOKS LIKE A GIT LFS POINTER FILE !!!` : null,
+                            p.fetchError ? `fetch() threw: ${p.fetchError}` : null,
+                            "range request bytes=0-63:",
+                            "error" in p.range
+                              ? `  ${p.range.error}`
+                              : [
+                                  `  status: ${p.range.status}`,
+                                  `  Content-Range: ${p.range.contentRange ?? "null"}`,
+                                  `  returned bytes: ${p.range.byteCount}`,
+                                  `  first 32 bytes (hex): ${p.range.first32Hex}`,
+                                ].join("\n"),
+                          ]
+                            .filter(Boolean)
+                            .join("\n")
+                        )
+                        .join("\n\n"),
                 ].join("\n")}
               </pre>
             </>
