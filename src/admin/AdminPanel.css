@@ -1,0 +1,95 @@
+.admin {
+  position: absolute;
+  inset: 0;
+  background: var(--void);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 0 28px;
+  text-align: center;
+}
+
+.admin__mark {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  opacity: 0.4;
+  margin: 0;
+}
+
+.admin__form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.admin__input {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.admin__input:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--ink) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.admin__button {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  padding: 16px 20px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  opacity: 0.85;
+}
+
+.admin__button:active {
+  opacity: 1;
+}
+
+.admin__button:disabled {
+  opacity: 0.4;
+}
+
+.admin__button--primary {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.admin__button--quiet {
+  border-color: transparent;
+  opacity: 0.5;
+}
+
+.admin__prompt {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+  opacity: 0.8;
+  margin: 0;
+}
+
+.admin__hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.5;
+  margin: 0;
+}
+
+.admin__error {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: #e0a6a6;
+  margin: 0;
+}

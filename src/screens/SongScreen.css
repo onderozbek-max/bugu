@@ -1,0 +1,148 @@
+.song-screen {
+  position: absolute;
+  inset: 0;
+  padding: 0 28px;
+}
+
+/* Title and controls as one composed unit — they always move, fade, and
+   settle together, anchored low/high/centered by the song's own horizonY
+   (see SongScreen.tsx), matching the world's horizon behind them rather
+   than being positioned by two independent mechanisms. */
+.song-screen__stage {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 34px;
+}
+
+.song-screen__title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 12vw, 64px);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-align: center;
+  margin: 0;
+  opacity: 1;
+  transition: opacity 1300ms var(--ease-resolve);
+}
+
+/* ŞİMDİ's title — a culmination, not an art-gallery title card. Deliberately
+   NOT larger than DÜN/YARIN's (bigger is not automatically more emotional);
+   slightly tighter tracking and full opacity give it presence through
+   precision instead of scale. */
+.song-screen__title--culmination {
+  font-size: clamp(38px, 11vw, 58px);
+  letter-spacing: 0.14em;
+}
+
+/* The song ending (DÜN or YARIN, in Journey Mode) — the title recedes
+   first, while the world itself keeps transforming behind it. */
+.song-screen__title--concluding {
+  opacity: 0;
+}
+
+.song-screen__controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  opacity: 1;
+  /* Fast to reappear (this rule applies to the "waking up" transition),
+     slow to recede (the --faded rule below applies to that transition) —
+     the asymmetry is what makes the reappearance feel responsive rather
+     than laggy, and the recession feel settled rather than twitchy. */
+  transition: opacity 450ms var(--ease-resolve);
+}
+
+.song-screen__controls--faded {
+  opacity: 0.12;
+  transition-duration: 1800ms;
+}
+
+/* Permanent, one-way — the song has ended and there is nothing left to
+   control (Journey Mode has no replay). Goes fully transparent rather than
+   receded, and stops accepting taps so a stray touch during the hold can't
+   flash the controls back in right before the world closes. */
+.song-screen__controls--concluding {
+  opacity: 0;
+  transition-duration: 1300ms;
+  pointer-events: none;
+}
+
+.song-screen__progress {
+  width: 100%;
+  max-width: 420px;
+}
+
+.song-screen__time {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  opacity: 0.4;
+  margin-top: 2px;
+}
+
+.song-screen__sozler {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+  padding: 10px 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 40%, transparent);
+  transition: opacity 200ms var(--ease-resolve), border-color 200ms var(--ease-resolve);
+}
+
+.song-screen__sozler:active {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+.song-screen__retry {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+  padding: 22px 20px;
+  border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: 999px;
+}
+
+.song-screen__retry:active {
+  opacity: 1;
+}
+
+.song-screen__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-display);
+  font-size: 28px;
+  opacity: 0.45;
+  padding: 18px 14px;
+  z-index: 2;
+  transition: opacity 450ms var(--ease-resolve);
+}
+
+.song-screen__nav:active {
+  opacity: 0.85;
+}
+
+.song-screen__nav--faded {
+  opacity: 0.1;
+  transition-duration: 1800ms;
+}
+
+.song-screen__nav--prev {
+  left: 4px;
+}
+
+.song-screen__nav--next {
+  right: 4px;
+}

@@ -1,0 +1,125 @@
+/*
+  Typography: intentionally system-only, no downloaded webfonts.
+  `ui-serif` resolves to New York on iOS 13+/Safari — a refined serif with
+  full Turkish (Latin Extended-A) glyph coverage for Ğ ğ Ş ş İ ı, no network
+  fetch required (matters on weak connections), and no risk of a "latin-only"
+  subset silently dropping Turkish characters the way many webfont CDNs do.
+*/
+
+:root {
+  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  --ink: #f5f1ea;
+  --void: #07060a;
+
+  --ease-resolve: cubic-bezier(0.16, 1, 0.3, 1);
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--void);
+  color: var(--ink);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-ui);
+  min-height: 100svh;
+}
+
+#root {
+  /* dvh with svh/lvh fallback chain for older iOS Safari versions */
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+button:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--ink) 50%, transparent);
+  outline-offset: 4px;
+}
+
+/*
+ * Contrast guarantee, independent of the world behind it: every chapter's
+ * title/controls sit in front of PersistentWorld's horizon glow, which by
+ * design changes brightness and hue per phase. Rather than hand-tuning
+ * contrast per phase against a moving target (fragile across viewport
+ * sizes and safe areas), every chrome layer that carries essential text or
+ * controls gets a fixed, generous dark vignette behind whichever edge it
+ * anchors to. This is a floor, not a decoration — it must hold regardless
+ * of what the world is doing. Decorative elements may be subtle; this may
+ * not, so it uses a plain opaque-toward-void gradient rather than a low
+ * opacity.
+ */
+.chrome-scrim-top,
+.chrome-scrim-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 38vh;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.chrome-scrim-top {
+  top: 0;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--void) 52%, transparent) 0%, transparent 100%);
+}
+
+.chrome-scrim-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--void) 52%, transparent) 0%, transparent 100%);
+}
+
+img,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* Covers plain CSS animations/transitions only (including PersistentWorld's
+   drifting motes and its filter/opacity transitions, and SongScreen's
+   controls-fade/nav-fade transitions). Framer Motion drives its own JS
+   timers and ignores this block, so any component animated with
+   <motion.*> must check prefersReducedMotion() (src/lib/motionPrefs.ts)
+   itself — FadeTransition, PersistentWorld's own tween, Opening's
+   blur-clear, AlbumHome's list stagger, and LyricsSheet's scrim/sheet
+   entrance all do. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,145 @@
+/*
+ * Every value in here reads from --w-horizon / --w-crowd / --w-clarity /
+ * --w-spread / --w-drift / --w-tone / --w-resolve — seven plain numbers
+ * PersistentWorld.tsx tweens over time on its own root element. Nothing
+ * here mounts or unmounts between DÜN/YARIN/ŞİMDİ; only these numbers
+ * change, continuously, so there is never a frame where one composited
+ * layer is swapped for another.
+ *
+ * Fallback values in each var() are only for the first paint before the
+ * component's effect has run once — they should never be visible for more
+ * than a frame.
+ */
+
+:root {
+  /* Dusk and dawn — the horizon's two lights. Deliberately mixed heavily
+     toward --void wherever they cover any real area of the frame (see
+     .world__glow below); the brighter, more saturated versions of these
+     hues live only on the thin line itself and the small drifting motes,
+     never as a wash behind title/controls text. This is what keeps YARIN
+     from repeating the old pale-on-pale contrast failure. */
+  --w-dusk: #7a5a42;
+  --w-dawn: #d9a862;
+}
+
+.world {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--void);
+}
+
+/* The horizon's glow: a soft light seated at the line's own vertical
+   position, tinted dusk->dawn via --w-tone, reaching further as --w-spread
+   rises (DÜN stays close/contained; YARIN spreads open; ŞİMDİ pulls back
+   from YARIN's widest reach to something calmer and more immediate).
+   Capped at 72% of its radius before fading fully into --void, so no
+   amount of spread ever turns a large area of the frame pale. */
+.world__glow {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(
+    calc(38% + var(--w-spread, 0.3) * 42%) calc(30% + var(--w-spread, 0.3) * 30%) at 50%
+      calc(100% - var(--w-horizon, 0.2) * 100%),
+    color-mix(in srgb, var(--w-dusk) calc((1 - var(--w-tone, 0)) * 100%), var(--w-dawn) calc(var(--w-tone, 0) * 100%))
+      0%,
+    var(--void) 72%
+  );
+  opacity: calc(0.3 + var(--w-spread, 0.3) * 0.3);
+  filter: saturate(calc(1 - var(--w-resolve, 0) * 0.45));
+  transition: filter 1.4s var(--ease-resolve);
+}
+
+/* Two soft, slow-drifting light motes flanking the line — the only
+   continuously moving parts. Their drift period is --w-drift itself:
+   longer = calmer, which is what makes DÜN feel heavier/stiller than
+   YARIN, and ŞİMDİ nearly imperceptible. */
+.world__mote {
+  position: absolute;
+  width: 56vmax;
+  height: 56vmax;
+  border-radius: 50%;
+  filter: blur(min(18vw, 140px));
+  background: color-mix(in srgb, var(--w-dusk) calc((1 - var(--w-tone, 0)) * 100%), var(--w-dawn) calc(var(--w-tone, 0) * 100%));
+  opacity: calc(0.14 + var(--w-spread, 0.3) * 0.22);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.world__mote--a {
+  left: 4%;
+  top: calc(100% - var(--w-horizon, 0.2) * 100% - 22%);
+  animation: world-drift-a var(--w-drift, 170s) ease-in-out infinite alternate;
+}
+
+.world__mote--b {
+  right: 0%;
+  top: calc(100% - var(--w-horizon, 0.2) * 100% - 6%);
+  animation: world-drift-b var(--w-drift, 170s) ease-in-out infinite alternate;
+  animation-delay: calc(var(--w-drift, 170s) * -0.4);
+}
+
+@keyframes world-drift-a {
+  from {
+    transform: translate(-4%, 2%) scale(1);
+  }
+  to {
+    transform: translate(5%, -3%) scale(1.08);
+  }
+}
+
+@keyframes world-drift-b {
+  from {
+    transform: translate(3%, -2%) scale(1.05);
+  }
+  to {
+    transform: translate(-5%, 4%) scale(0.96);
+  }
+}
+
+/* Grain: the tactile/imperfect-recollection layer, masked so it crowds
+   specifically around the horizon line rather than covering the whole
+   frame evenly — dense for DÜN, thinning for YARIN, nearly gone by ŞİMDİ.
+   This is what makes the line feel *buried* early on and *cleared* later,
+   rather than a flat opacity fade of an unrelated texture. */
+.world__grain {
+  position: absolute;
+  inset: -12%;
+  opacity: calc(var(--w-crowd, 0.3) * (1 - var(--w-resolve, 0) * 0.9));
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 320px 320px;
+  mask-image: radial-gradient(
+    120% 55% at 50% calc(100% - var(--w-horizon, 0.2) * 100%),
+    #000 0%,
+    transparent 78%
+  );
+  -webkit-mask-image: radial-gradient(
+    120% 55% at 50% calc(100% - var(--w-horizon, 0.2) * 100%),
+    #000 0%,
+    transparent 78%
+  );
+  transition: opacity 1.4s var(--ease-resolve);
+}
+
+/* The horizon line itself — the one persistent object every chapter shares.
+   Faint and broken when --w-clarity is low (DÜN, buried under crowd);
+   sharp, bright, and steady once it's high (YARIN clearing, ŞİMDİ fully
+   resolved). The progress bar (see ProgressBar.css) is styled to read as a
+   lit continuation of this same line. */
+.world__line {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: calc(100% - var(--w-horizon, 0.2) * 100%);
+  height: calc(1px + var(--w-clarity, 0.3) * 1.6px);
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--ink) calc(30% + var(--w-clarity, 0.3) * 60%), transparent);
+  filter: blur(calc((1 - var(--w-clarity, 0.3)) * 5px));
+  box-shadow: 0
+    0
+    calc(var(--w-clarity, 0.3) * 22px)
+    color-mix(in srgb, var(--w-dusk) calc((1 - var(--w-tone, 0)) * 100%), var(--w-dawn) calc(var(--w-tone, 0) * 100%));
+  transition: filter 1.2s var(--ease-resolve);
+}

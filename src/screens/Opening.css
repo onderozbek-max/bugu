@@ -1,0 +1,70 @@
+.opening {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  /* No background of its own — PersistentWorld is already mounted behind
+     this, in its "opening" phase. */
+  padding: 0 28px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.opening__mark-wrap {
+  position: relative;
+  z-index: 2;
+}
+
+.opening__mark {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 14vw, 72px);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.opening__sub {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+  margin: 0;
+}
+
+.opening__begin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  bottom: calc(env(safe-area-inset-bottom) + 14vh);
+  display: flex;
+  justify-content: center;
+}
+
+/* Real button chrome, not an opacity-only text link — "başla" is the one
+   tap that starts everything, and must read as unmistakably tappable under
+   outdoor light, an imperfect screen, or a distracted glance. A filled pill
+   in --ink holds up under all of those in a way a low-opacity label does
+   not; luxury/restraint comes from the typography and spacing, not from
+   making the one required action hard to see. */
+.opening__begin button {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  color: var(--void);
+  background: var(--ink);
+  padding: 16px 34px;
+  border-radius: 999px;
+  box-shadow: 0 2px 18px color-mix(in srgb, var(--void) 55%, transparent);
+  transition: transform 200ms var(--ease-resolve), box-shadow 200ms var(--ease-resolve);
+}
+
+.opening__begin button:active {
+  transform: scale(0.96);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--void) 40%, transparent);
+}

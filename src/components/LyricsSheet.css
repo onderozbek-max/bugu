@@ -1,0 +1,76 @@
+/* The scrim itself softens the world behind it rather than hiding it —
+   this is the "controlled blur/translucency" the sheet is meant to be
+   read as a layer OF, not a separate native-drawer surface bolted on top. */
+.lyrics-scrim {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--void) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 20;
+}
+
+/* Translucent, not a solid panel: the world's own hue and light keep
+   bleeding through (via backdrop-filter), so opening sözler still reads as
+   "looking further into the same world," not "a new OS surface covering
+   it." Opacity is still high enough to hold typography comfortably
+   readable regardless of what's happening behind it. */
+.lyrics-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  max-height: 72vh;
+  max-height: 72dvh;
+  background: color-mix(in srgb, var(--void) 74%, transparent);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 22px 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* A thin lit hairline rather than a generic gray pill — the same visual
+   language as the world's own horizon line, tinted with the song's accent,
+   so the sheet still reads as authored rather than a default UI drawer. */
+.lyrics-sheet__handle {
+  width: 44px;
+  height: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 55%, var(--accent, var(--ink)) 45%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent, var(--ink)) 55%, transparent);
+  margin: 14px auto 6px;
+  flex-shrink: 0;
+}
+
+.lyrics-sheet__title {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: none;
+  opacity: 0.68;
+  text-align: center;
+  padding: 10px 0 4px;
+  flex-shrink: 0;
+}
+
+.lyrics-sheet__body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 28px 40px;
+  font-family: var(--font-display);
+}
+
+.lyrics-sheet__stanza {
+  margin: 0 0 28px;
+  font-size: 19px;
+  line-height: 1.7;
+  font-weight: 400;
+}
+
+.lyrics-sheet__stanza p {
+  margin: 0;
+}

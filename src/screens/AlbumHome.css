@@ -1,0 +1,121 @@
+.album-home {
+  position: absolute;
+  inset: 0;
+  /* No background of its own — PersistentWorld (phase="album") is already
+     mounted behind this. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 28px;
+}
+
+.album-home__mark {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  opacity: 0.55;
+  margin: 0 0 48px;
+}
+
+/* A tall relative region rather than a flowing stack — each song is
+   absolutely positioned within it at its own horizonY (see
+   AlbumHome.tsx), so their vertical relationship mirrors the same one
+   PersistentWorld draws during Journey Mode. */
+.album-home__list {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 360px;
+  height: min(52vh, 420px);
+}
+
+/* The connecting throughline — DÜN, YARIN, and ŞİMDİ read as three points
+   on one continuous axis, not three unrelated menu rows. */
+.album-home__axis {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  bottom: 6%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ink) 22%, transparent) 20%,
+    color-mix(in srgb, var(--ink) 22%, transparent) 80%,
+    transparent
+  );
+}
+
+.album-home__item {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+}
+
+.album-home__item-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 9vw, 40px);
+  font-weight: 400;
+}
+
+.album-home__item-line {
+  width: 30px;
+  height: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 40%, var(--accent, var(--ink)) 60%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent, var(--ink)) 50%, transparent);
+}
+
+.album-home__footer {
+  position: relative;
+  z-index: 2;
+  margin-top: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  max-width: 320px;
+}
+
+.album-home__footer-line {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  margin: 0;
+}
+
+.album-home__footer-note {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-style: italic;
+  opacity: 0.72;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.album-back {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 18px);
+  left: 24px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+  z-index: 5;
+}
+
+.album-back:active {
+  opacity: 1;
+}

@@ -1,0 +1,49 @@
+.play-pause {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  /* Tinted with the song's accent (see --accent, set by SongScreen) — the
+     glyph itself stays --ink regardless (see .play-pause svg below):
+     DÜN's #8a6a4f at icon scale against the near-black void drops below
+     comfortable contrast, so only the border/frame picks up the color. */
+  border: 1px solid color-mix(in srgb, var(--ink) 65%, var(--accent, var(--ink)) 35%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 300ms var(--ease-resolve), transform 300ms var(--ease-resolve);
+}
+
+.play-pause:active {
+  transform: scale(0.96);
+  border-color: color-mix(in srgb, var(--ink) 40%, var(--accent, var(--ink)) 60%);
+}
+
+.play-pause svg {
+  width: 22px;
+  height: 22px;
+  fill: var(--ink);
+}
+
+/* A slow, even breathing pulse on the ring only — the icon itself stays
+   put, so tapping play on a slow connection reads as "this is working,
+   just waiting on data" rather than a second, competing loading widget. */
+.play-pause--buffering {
+  animation: play-pause-buffering 1600ms ease-in-out infinite;
+}
+
+@keyframes play-pause-buffering {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--ink) 65%, var(--accent, var(--ink)) 35%);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--ink) 25%, var(--accent, var(--ink)) 75%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-pause--buffering {
+    animation: none;
+    border-color: color-mix(in srgb, var(--ink) 25%, var(--accent, var(--ink)) 75%);
+  }
+}
