@@ -15,6 +15,19 @@
 export type SongId = "dun" | "yarin" | "simdi";
 
 /**
+ * Resolves a `public/`-relative path against Vite's actual deployed base
+ * (`import.meta.env.BASE_URL` — "/" locally, "/<repo>/" on a GitHub Pages
+ * project site). Root-absolute strings like "/audio/dun.m4a" only work when
+ * the site is served from the domain root; under a subpath they 404 (the
+ * request never reaches the /<repo>/ prefix at all), which is what silently
+ * broke every audio source and the Album Mode remote-flag poll once
+ * deployed. `path` must never start with "/" — BASE_URL already ends in one.
+ */
+function asset(path: string): string {
+  return `${import.meta.env.BASE_URL}${path}`;
+}
+
+/**
  * Feeds PersistentWorld's continuous per-song target state — not a preset
  * "look" a component switches on, but a small set of tunable numbers a
  * single visual system tweens between. See src/world/PersistentWorld.tsx.
@@ -91,8 +104,8 @@ export const songs: Record<SongId, SongConfig> = {
     // the rare browser whose AAC decoder can't handle this particular file,
     // not a silent regression to filler audio.
     sources: [
-      { src: "/audio/dun.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
-      { src: "/audio/dun.mp3", type: "audio/mpeg", quality: "compatible" },
+      { src: asset("audio/dun.m4a"), type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: asset("audio/dun.mp3"), type: "audio/mpeg", quality: "compatible" },
     ],
     // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied. Do not rewrite,
     // spell-check, normalize, or "fix" repeated/near-identical stanzas.
@@ -144,8 +157,8 @@ export const songs: Record<SongId, SongConfig> = {
     title: "YARIN",
     // See DÜN's sources comment — same reasoning.
     sources: [
-      { src: "/audio/yarin.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
-      { src: "/audio/yarin.mp3", type: "audio/mpeg", quality: "compatible" },
+      { src: asset("audio/yarin.m4a"), type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: asset("audio/yarin.mp3"), type: "audio/mpeg", quality: "compatible" },
     ],
     // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied. Note the chorus
     // recurs with two distinct variants ("Senden"/"İçimde hâlâ sen var" vs.
@@ -221,8 +234,8 @@ export const songs: Record<SongId, SongConfig> = {
     title: "ŞİMDİ",
     // See DÜN's sources comment — same reasoning.
     sources: [
-      { src: "/audio/simdi.m4a", type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
-      { src: "/audio/simdi.mp3", type: "audio/mpeg", quality: "compatible" },
+      { src: asset("audio/simdi.m4a"), type: 'audio/mp4; codecs="mp4a.40.2"', quality: "high" },
+      { src: asset("audio/simdi.mp3"), type: "audio/mpeg", quality: "compatible" },
     ],
     // AUTHORITATIVE, LOCKED lyrics — verbatim as supplied.
     lyrics: [
@@ -326,7 +339,7 @@ export function qualityPreferenceOrder(policy: AudioDeliveryPolicy): SourceQuali
  * and paste the resulting hex string below.
  */
 export const albumModeEnvDefault: boolean = import.meta.env.VITE_ALBUM_MODE === "true";
-export const REMOTE_ALBUM_MODE_FLAG_URL = "/album-mode.json";
+export const REMOTE_ALBUM_MODE_FLAG_URL = asset("album-mode.json");
 export const ALBUM_UNLOCK_PASSPHRASE = "sensinki";
 export const ADMIN_PASSPHRASE_HASH =
   "3f0f2e5c2a2d1e9c9d8b7a6f5e4d3c2b1a0f9e8d7c6b5a4938271605f4e3d2c1"; // placeholder — replace, see above
