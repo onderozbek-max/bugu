@@ -80,8 +80,12 @@ const PREFERS_REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const SPRING_K    = 12.0;
-const SPRING_DAMP = 0.60;
+// Softer spring: K=3 → natural period ~2.1s, kick displacement visible for ~0.8s.
+// Old K=12 damped to <1px in 3 frames — visually zero. This is the bug.
+const SPRING_K    = 3.0;
+// 0.94 per frame at 60fps → velocity halves every ~11 frames (~0.18s).
+// Old 0.60 per frame → halved every 1 frame — impossible to see.
+const SPRING_DAMP = 0.94;
 
 export class WorldRenderer {
   private canvas: HTMLCanvasElement;
@@ -91,14 +95,20 @@ export class WorldRenderer {
   private formStates: FormState[] = [];
   private raf: number | null = null;
 
-  private elapsed   = 0;   // total wall-clock time (seconds)
+  private elapsed   = 0;
   private lastTime: number | null = null;
   private isPlaying = false;
-  private prevTransient = 0;
+  // private prevTransient = 0; // removed — beats replace transient signal
 
   private getSignals: (() => AudioSignals) | null = null;
+  /** Called each frame to get reliable audio position — no Web Audio needed */
+  // removed duplicate getter declaration
 
-  // Logical pixel dimensions (post-DPR transform)
+  // Beat tracking (uses real song timestamps from beatMaps.ts)
+  private nextKickIdx = 0;
+  private nextHitIdx  = 0;
+  // private lastBeatTime = -1; // unused
+
   private lw = 0;
   private lh = 0;
 
@@ -118,13 +128,20 @@ export class WorldRenderer {
       effectiveAlpha: f.fillAlpha,
       energyOffX: 0, energyOffY: 0,
     }));
-    this.elapsed = 0; // restart authored moments on song switch
-    this.prevTransient = 0;
+    this.elapsed = 0;
+    this.nextKickIdx = 0;
+    this.nextHitIdx  = 0;
   }
 
   setSignalsProvider(fn: (() => AudioSignals) | null): void {
     this.getSignals = fn;
   }
+
+  setAudioTimeGetter(fn: (() => { currentTime: number; duration: number }) | null): void {
+    this.getAudioTimeGetter = fn;
+  }
+
+  private getAudioTimeGetter: (() => { currentTime: number; duration: number }) | null = null;
 
   setPlaying(playing: boolean): void {
     this.isPlaying = playing;
@@ -175,50 +192,93 @@ export class WorldRenderer {
 
   // ─── Physics update ──────────────────────────────────────────────────────
 
-  private update(dt: number, signals: AudioSignals | null): void {
-    const config  = this.config!;
-    const t       = this.elapsed;
-    const w       = this.lw;
-    const h       = this.lh;
+  private update(dt: number, _signals: AudioSignals | null): void {
+    const config = this.config!;
+    const t      = this.elapsed;
+    const w      = this.lw;
+    const h      = this.lh;
 
-    // Transient pulse: how much transient signal increased this frame
-    const tr     = signals?.transient ?? 0;
-    const trPulse = Math.max(0, tr - this.prevTransient - 0.05);
-    this.prevTransient = tr;
+    // ── Real-time audio position (reliable on iOS, no Web Audio needed) ───
+    const audioPos = this.getAudioTimeGetter?.() ?? { currentTime: 0, duration: 1 };
+    const currentTime = audioPos.currentTime;
+    const duration    = Math.max(1, audioPos.duration);
+    const progress    = currentTime / duration; // 0–1 narrative position
 
-    // Authored moments: time-based translations applied per-form
+    // ── Beat detection: fire spring kicks from pre-computed timestamps ─────
+    // No AudioContext, no analyser — just compare currentTime to known beats.
+    let kickThisFrame = 0;  // normalized strength of kick this frame (0=none)
+    let hitThisFrame  = 0;
+
+    if (this.isPlaying && !PREFERS_REDUCED_MOTION) {
+      const { kicks, hits } = config.beatMap;
+
+      // Advance past already-fired kicks
+      while (this.nextKickIdx < kicks.length && kicks[this.nextKickIdx][0] < currentTime - 0.05) {
+        this.nextKickIdx++;
+      }
+      // Check if next kick is NOW (within current frame window)
+      if (this.nextKickIdx < kicks.length) {
+        const [beatT, strength] = kicks[this.nextKickIdx];
+        if (beatT >= currentTime - 0.05 && beatT <= currentTime + dt + 0.05) {
+          kickThisFrame = strength;
+          this.nextKickIdx++;
+        }
+      }
+
+      // Same for hits
+      while (this.nextHitIdx < hits.length && hits[this.nextHitIdx][0] < currentTime - 0.05) {
+        this.nextHitIdx++;
+      }
+      if (this.nextHitIdx < hits.length) {
+        const [beatT, strength] = hits[this.nextHitIdx];
+        if (beatT >= currentTime - 0.05 && beatT <= currentTime + dt + 0.05) {
+          hitThisFrame = strength;
+          this.nextHitIdx++;
+        }
+      }
+    }
+
+    // ── Narrative arc: position-based world transformation ─────────────────
+    // Forms shift by authored amounts as the song progresses (0→1).
+    // This runs regardless of beat detection — even with audio paused,
+    // resuming from mid-song should show the correct world state.
+    const narrativeOffsets: { x: number; y: number }[] = config.forms.map(() => ({ x: 0, y: 0 }));
+    for (const [arcProgress, formIdx, dx, dy] of config.narrativeArc) {
+      // Each arc entry contributes proportionally once the song reaches that progress
+      const alpha = Math.max(0, Math.min(1, progress / arcProgress));
+      if (formIdx < narrativeOffsets.length) {
+        narrativeOffsets[formIdx].x += dx * w * alpha;
+        narrativeOffsets[formIdx].y += dy * h * alpha;
+      }
+    }
+
+    // ── Authored wall-clock moments ────────────────────────────────────────
     const momentOffsets = this.computeMomentOffsets(config.moments, t, config.forms);
 
     for (let i = 0; i < config.forms.length; i++) {
-      const f = config.forms[i];
-      const s = this.formStates[i];
+      const f  = config.forms[i];
+      const s  = this.formStates[i];
+      const mo = momentOffsets[i];
 
-      // ── Authored moment alpha fade-in ──────────────────────────────────
-      const { fadeInAlpha } = momentOffsets[i];
-      if (f.fillAlpha === 0 && fadeInAlpha !== undefined) {
-        s.effectiveAlpha = fadeInAlpha * f.fillAlpha; // only relevant for non-zero authored
-        // For the far tiny form: authored fillAlpha is 0, but we want to fade in to 0.28
-        // We store the "target" alpha separately
+      // ── Beat kick — direct impulse displacement + small velocity ──────────
+      // Direct displacement (not just velocity) guarantees visible movement:
+      // the form instantly jumps by up to `transientStrength * h` pixels in its
+      // preferred direction, then the spring pulls it back over ~0.5-1s.
+      // Previous approach (velocity only + K=12 damp=0.60) produced <1px
+      // displacement in <3 frames — visually zero.
+      if (kickThisFrame > 0) {
+        const maxPx = kickThisFrame * config.transientStrength * h * f.transientScale;
+        // Instant position jump (visible this frame)
+        s.dispX += f.transientDirX * maxPx;
+        s.dispY += f.transientDirY * maxPx;
+        // Small additional velocity for bounce-back feel
+        s.velX  += f.transientDirX * maxPx * 0.4;
+        s.velY  += f.transientDirY * maxPx * 0.4;
       }
-      // (Handled below where effectiveAlpha is computed for the fade-in form)
+      // Hit: smaller scale effect (no spring, just a brief alpha brightening)
+      // handled in draw() via `hitThisFrame`
 
-      // ── Energy-driven inter-form drift ─────────────────────────────────
-      // This changes the RELATIONSHIP between forms (gap/overlap) rather
-      // than moving the whole world uniformly — avoids "bouncing" feel.
-      const energyMag = (signals?.bass ?? 0) * 0.6 + (signals?.energy ?? 0) * 0.4;
-      const targetEnergyOffX = f.energyDriftScale * energyMag
-        * config.energyResponseScale * f.energyDriftDirX * w;
-      const targetEnergyOffY = f.energyDriftScale * energyMag
-        * config.energyResponseScale * f.energyDriftDirY * h;
-      s.energyOffX += (targetEnergyOffX - s.energyOffX) * 0.08;
-      s.energyOffY += (targetEnergyOffY - s.energyOffY) * 0.08;
-
-      // ── Transient spring kick ──────────────────────────────────────────
-      if (trPulse > 0 && !PREFERS_REDUCED_MOTION && this.isPlaying) {
-        const strength = trPulse * config.transientStrength * h * f.transientScale;
-        s.velX += f.transientDirX * strength;
-        s.velY += f.transientDirY * strength;
-      }
+      // ── Spring physics ─────────────────────────────────────────────────
       s.velX += (0 - s.dispX) * SPRING_K * dt;
       s.velY += (0 - s.dispY) * SPRING_K * dt;
       const damp = Math.pow(SPRING_DAMP, dt * 60);
@@ -226,8 +286,19 @@ export class WorldRenderer {
       s.velY *= damp;
       s.dispX += s.velX * dt;
       s.dispY += s.velY * dt;
+
+      // Store hit + narrative offsets for draw
+      s.energyOffX = narrativeOffsets[i].x + (mo.offX ?? 0);
+      s.energyOffY = narrativeOffsets[i].y + (mo.offY ?? 0);
     }
+
+    // Store hit for draw
+    this._hitThisFrame  = hitThisFrame;
+    this._kickThisFrame = kickThisFrame;
   }
+
+  private _hitThisFrame  = 0;
+  private _kickThisFrame = 0;
 
   /**
    * Compute per-form translation from authored moments.
@@ -255,7 +326,7 @@ export class WorldRenderer {
 
   // ─── Rendering ───────────────────────────────────────────────────────────
 
-  private draw(signals: AudioSignals | null): void {
+  private draw(_signals: AudioSignals | null): void {
     const config = this.config!;
     const ctx    = this.ctx;
     const w      = this.lw;
@@ -263,21 +334,32 @@ export class WorldRenderer {
     const t      = this.elapsed;
 
     // ── Background / trail ────────────────────────────────────────────────
-    // Partial clear: creates subtle motion persistence for form edges.
-    // Higher energy → more clearing (sharper motion); quiet → longer trail.
+    // Kick flashes briefly brighten the background (screen-blend white flash)
+    const kick = this._kickThisFrame;
+    const hit  = this._hitThisFrame;
     let trail = config.trailAlpha;
-    if (signals) trail += signals.energy * (1 - config.trailAlpha) * 0.35;
+    // Shorten trail on beats so kick displacement is crisp, not smeared
+    if (kick > 0) trail = Math.min(0.95, trail + kick * 0.45);
+    if (hit  > 0) trail = Math.min(0.95, trail + hit  * 0.20);
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = `hsla(${config.bgH}, ${config.bgS}%, ${config.bgL}%, ${trail})`;
     ctx.fillRect(0, 0, w, h);
 
-    // ── Forms: far → near (source-over for proper occlusion) ─────────────
-    // Sort by depth ascending (0=far first, 1=near last)
-    const forms = [...config.forms];
+    // Brief luminous flash on strong kicks — a subtle screen-blend white at center
+    if (kick > 0.4 && !PREFERS_REDUCED_MOTION) {
+      ctx.globalCompositeOperation = "screen";
+      const fl = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, h * 0.5);
+      fl.addColorStop(0, `hsla(${config.bgH + 30}, 20%, 80%, ${kick * 0.12})`);
+      fl.addColorStop(1, "transparent");
+      ctx.fillStyle = fl;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // ── Forms: far → near ─────────────────────────────────────────────────
+    const forms  = [...config.forms];
     const states = this.formStates;
     const momentOffsets = this.computeMomentOffsets(config.moments, t, forms);
-
-    // Sort indices by depth so we render far→near
     const order = forms.map((_, i) => i).sort((a, b) => forms[a].depth - forms[b].depth);
 
     for (const i of order) {
@@ -288,27 +370,18 @@ export class WorldRenderer {
       // ── Effective alpha ─────────────────────────────────────────────────
       let effectiveAlpha = f.fillAlpha;
       if (mo.fadeInAlpha !== undefined) {
-        // fadeIn moment brightens the form from its authored fillAlpha to
-        // a higher value (1.8× authored, capped at 0.95). F0 in YARIN
-        // starts at fillAlpha=0.22 and rises to ~0.40 over t=8-14s.
         const target = Math.min(0.95, f.fillAlpha * 1.8);
         effectiveAlpha = f.fillAlpha + (target - f.fillAlpha) * mo.fadeInAlpha;
       }
-      // Slight audio luminance response (far: bass, near: mid)
-      let alphaBoost = 0;
-      if (signals) {
-        alphaBoost = f.depth > 0.7
-          ? signals.mid  * 0.15
-          : f.depth > 0.3
-          ? signals.energy * 0.12
-          : signals.bass   * 0.14;
-      }
-      effectiveAlpha = Math.min(0.95, effectiveAlpha + effectiveAlpha * alphaBoost);
+      // Beat luminance boost: hit makes forms briefly brighter
+      const beatBoost = kick * 0.18 * f.transientScale + hit * 0.08;
+      effectiveAlpha = Math.min(0.95, effectiveAlpha + effectiveAlpha * beatBoost);
 
       // ── Compute displaced anchor positions ──────────────────────────────
       const driftScale = PREFERS_REDUCED_MOTION ? 0.08 : 1.0;
-      const totalOffX  = mo.offX + s.dispX + s.energyOffX;
-      const totalOffY  = mo.offY + s.dispY + s.energyOffY;
+      // energyOffX/Y now carries: narrative arc + moment offsets (set in update())
+      const totalOffX  = s.dispX + s.energyOffX;
+      const totalOffY  = s.dispY + s.energyOffY;
 
       // Compute drifted and offset anchors
       const driftedAnchors: [number, number][] = f.anchors.map((a, idx) => {

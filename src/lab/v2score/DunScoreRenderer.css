@@ -1,0 +1,62 @@
+/* DÜN Score Renderer — Checkpoint 1 */
+
+.dun-score {
+  position: fixed;
+  inset: 0;
+  background: #010101;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.dun-score__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Dev overlay */
+.dun-score__dev {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 20px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.80);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 999;
+  white-space: nowrap;
+}
+
+.dun-score__dev-btn {
+  font-size: 14px;
+  color: rgba(242, 238, 225, 0.75);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dun-score__dev-seek {
+  width: 150px;
+  accent-color: rgba(242, 238, 225, 0.70);
+  cursor: pointer;
+}
+
+.dun-score__dev-time {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 10px;
+  color: rgba(242, 238, 225, 0.45);
+  min-width: 40px;
+  text-align: left;
+}

@@ -57,6 +57,12 @@ export function LabApp() {
     onResize();
 
     rnd.setConfig(PHASE_CONFIGS["dun"]);
+    // Give the renderer a stable way to read audio position — no Web Audio needed.
+    // AudioEngine.element.currentTime is reliable on iOS regardless of AudioContext state.
+    rnd.setAudioTimeGetter(() => ({
+      currentTime: AudioEngine.element.currentTime,
+      duration: isFinite(AudioEngine.element.duration) ? AudioEngine.element.duration : 1,
+    }));
     rnd.start();
 
     return () => {
@@ -91,31 +97,44 @@ export function LabApp() {
   const revealControls = useCallback(() => {
     setVisible(true);
     scheduleHide();
+    // ── iOS Web Audio warm-up: MUST happen on this gesture ────────────────
+    // On iOS Safari, if the AudioContext is suspended when element.play()
+    // is called, iOS routes audio through the default hardware path,
+    // completely bypassing the Web Audio graph — so the analyser reads
+    // zeros while music plays normally. The AudioContext must be in the
+    // RUNNING state BEFORE element.play() is called.
+    //
+    // The canvas tap (which reveals controls) is the first user gesture.
+    // Warm up here so that by the time the user taps ▶ (2–3s later),
+    // the AudioContext is fully running and ready to analyse.
+    const ana = analyzer.current;
+    if (ana) {
+      if (!ana.isConnected) ana.connect(AudioEngine.element);
+      void ana.resume(); // initiate inside this gesture — resolves async
+      if (renderer.current) {
+        renderer.current.setSignalsProvider(() => ana.tick());
+      }
+    }
   }, [scheduleHide]);
 
   // Auto-hide after play begins
   useEffect(() => {
     if (isPlaying) scheduleHide();
-    else {
-      window.clearTimeout(hideTimer.current);
-      // Keep hidden even when paused — the art should be primary
-      // Only reveal on explicit tap
-    }
     return () => window.clearTimeout(hideTimer.current);
   }, [isPlaying, scheduleHide]);
 
   // ── Play / pause ───────────────────────────────────────────────────────
 
-  const handlePlay = useCallback(async () => {
+  const handlePlay = useCallback(() => {
+    // AudioContext already warmed on the canvas tap — just play + re-resume
+    // in case the context was suspended by backgrounding the tab.
     const ana = analyzer.current;
-    if (ana && !ana.isConnected) {
-      ana.connect(AudioEngine.element);
-    }
-    // Resume AudioContext synchronously in the gesture handler
-    if (ana) await ana.resume();
-    // Wire the analyzer into the renderer signal path
-    if (ana && renderer.current) {
-      renderer.current.setSignalsProvider(() => ana.tick());
+    if (ana) {
+      if (!ana.isConnected) ana.connect(AudioEngine.element);
+      void ana.resume();
+      if (renderer.current) {
+        renderer.current.setSignalsProvider(() => ana.tick());
+      }
     }
     AudioEngine.toggle();
   }, []);

@@ -26,6 +26,85 @@ if (window.location.pathname === "/admin") {
       <AdminPanel />
     </StrictMode>
   );
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-album") {
+  // V3 Album Mode — listen to any song, read lyrics, replay the journey.
+  // Unlocks after completing the full Journey. DO NOT MODIFY PRODUCTION.
+  import("./lab/v3album/V3AlbumApp").then(({ V3AlbumApp }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode><V3AlbumApp /></StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-journey") {
+  // V3 Journey — full three-song experience. Opening screen → DÜN → YARIN → ŞİMDİ.
+  // One tap starts everything. No player. No UI. DO NOT MIGRATE.
+  import("./lab/v3journey/V3JourneyApp").then(({ V3JourneyApp }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode><V3JourneyApp /></StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-simdi") {
+  // V3 ŞİMDİ — ∞ → Heart morph. Full 3:33. Heart revealed at 2:21.
+  // DO NOT MIGRATE. ?demo=1 / ?t=N / ?ui=1
+  import("./lab/v3simdi/V3SimdiRenderer").then(({ V3SimdiRenderer }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode><V3SimdiRenderer /></StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-yarin") {
+  // V3 YARIN — Key → ∞ morph. Full 3:52.
+  // ?demo=1 for internal clock. ?t=N for frozen screenshots. DO NOT MIGRATE.
+  import("./lab/v3yarin/V3YarinRenderer").then(({ V3YarinRenderer }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode><V3YarinRenderer /></StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-dun") {
+  // V3 DÜN authored score — Checkpoint 1 (0:00–1:35). Key form construction.
+  // ?demo=1 for internal clock / screen recording.
+  // ?t=N for frozen screenshots. DO NOT MIGRATE.
+  import("./lab/v3dun/V3DunRenderer").then(({ V3DunRenderer }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <V3DunRenderer />
+      </StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v3-forms") {
+  // V3 destination geometry review — B / Key / Heart from shared DNA. DO NOT MIGRATE.
+  import("./lab/v3forms/FormsLab").then(({ FormsLab }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode><FormsLab /></StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v2-score") {
+  // DÜN authored score — Checkpoint 1 (0:00–1:35).
+  // ?demo=1 for internal clock / screen recording.
+  // ?t=N for frozen screenshots. DO NOT MIGRATE.
+  import("./lab/v2score/DunScoreRenderer").then(({ DunScoreRenderer }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <DunScoreRenderer />
+      </StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v2-dun") {
+  // Gate B0 — DÜN 0:00–0:48 authored motion prototype.
+  // Completely isolated from production. DO NOT MIGRATE.
+  import("./lab/v2dun/DunSequence").then(({ DunSequence }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <DunSequence />
+      </StrictMode>
+    );
+  });
+} else if (new URLSearchParams(window.location.search).get("lab") === "v2-static") {
+  import("./lab/v2static/LabStaticApp").then(({ LabStaticApp }) => {
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <LabStaticApp />
+      </StrictMode>
+    );
+  });
 } else if (new URLSearchParams(window.location.search).get("lab") === "1") {
   // V2 Audiovisual Laboratory — completely isolated from the production journey.
   // Lazy-imported so it adds ZERO bytes to the main production bundle.

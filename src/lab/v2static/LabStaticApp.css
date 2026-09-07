@@ -1,0 +1,38 @@
+.static-lab {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Dev overlay — toggled via ?ui=1, never visible in art review */
+.static-lab__controls {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom), 20px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 999;
+  pointer-events: auto;
+}
+
+.static-lab__btn {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  padding: 5px 11px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 2px;
+  color: rgba(255,255,255,0.45);
+  background: rgba(0,0,0,0.60);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+
+.static-lab__btn--active {
+  color: rgba(255,255,255,0.88);
+  border-color: rgba(255,255,255,0.50);
+}

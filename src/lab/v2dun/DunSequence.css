@@ -1,0 +1,66 @@
+/* Gate B0 — DÜN 0:00–0:48 authored motion sequence */
+
+.dun48 {
+  position: fixed;
+  inset: 0;
+  background: #07060a;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.dun48__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Dev overlay — toggled via ?ui=1, never visible in art review ── */
+.dun48__dev {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 20px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 999;
+  white-space: nowrap;
+}
+
+.dun48__dev-btn {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dun48__dev-btn:active {
+  color: rgba(255, 255, 255, 1);
+}
+
+.dun48__dev-seek {
+  width: 140px;
+  accent-color: rgba(190, 165, 132, 0.85);
+  cursor: pointer;
+}
+
+.dun48__dev-time {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.48);
+  min-width: 38px;
+  text-align: left;
+}
