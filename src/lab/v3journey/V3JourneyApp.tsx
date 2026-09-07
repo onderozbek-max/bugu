@@ -45,10 +45,15 @@ import "./V3JourneyApp.css";
 
 // ── Audio sources ──────────────────────────────────────────────────────────────
 
+// Use BASE_URL so paths resolve correctly on GitHub Pages (/bugu/audio/…)
+// as well as locally (/audio/…). Hardcoded root-relative paths (/audio/…)
+// 404 on any deployment that isn't served from the domain root.
+const BASE = import.meta.env.BASE_URL;
+
 const SONGS = [
-  { id: "dun",   src: "/audio/dun.m4a",   duration: 224.67 },
-  { id: "yarin", src: "/audio/yarin.m4a", duration: 232.17 },
-  { id: "simdi", src: "/audio/simdi.m4a", duration: 213.21 },
+  { id: "dun",   src: `${BASE}audio/dun.m4a`,   duration: 224.67 },
+  { id: "yarin", src: `${BASE}audio/yarin.m4a`, duration: 232.17 },
+  { id: "simdi", src: `${BASE}audio/simdi.m4a`, duration: 213.21 },
 ] as const;
 
 type Song = typeof SONGS[number]["id"];
